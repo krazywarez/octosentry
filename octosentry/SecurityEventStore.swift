@@ -134,6 +134,16 @@ final class SecurityEventStore {
         await refresh()
     }
 
+    /// Lists repos the current token can see, for the repo picker (#15).
+    /// Requires broader repo-access scope — throws if the token only has
+    /// the default security_events scope.
+    func fetchAccessibleRepos() async throws -> [String] {
+        guard let token = KeychainTokenStore.load() else {
+            throw GitHubAPIError.missingToken
+        }
+        return try await GitHubSecurityAPIClient(token: token).fetchAccessibleRepos()
+    }
+
     /// Local-only triage state (spec §11) — no API write, no scope beyond
     /// read needed. Removes the event from the active stream.
     func markSeen(_ eventID: String) async {

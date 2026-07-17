@@ -86,3 +86,11 @@ nonisolated struct SecretScanningAlertDTO: Decodable {
         case validity
     }
 }
+
+nonisolated struct GitHubRepoDTO: Decodable {
+    let fullName: String
+
+    enum CodingKeys: String, CodingKey {
+        case fullName = "full_name"
+    }
+}

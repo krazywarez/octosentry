@@ -3,9 +3,9 @@
 //  octosentry
 //
 //  Fetches Dependabot, code scanning, and secret scanning alerts for a
-//  single repo and normalizes them into SecurityEvent. Auth is a PAT read
-//  by the caller from the GITHUB_TOKEN environment variable — a dev-only
-//  shortcut ahead of the device authorization flow (spec §6, §13).
+//  repo and normalizes them into SecurityEvent, plus (with broader scope)
+//  listing repos the token can see for the repo picker. The token itself
+//  comes from Keychain via the device authorization flow (spec §6).
 //
 
 import Foundation
@@ -87,6 +87,20 @@ actor GitHubSecurityAPIClient {
                 seenLocally: false
             )
         }
+    }
+
+    /// Lists repos the token can see (requires the broader repo-access
+    /// scope granted via AuthStore.requestRepoAccess(), not the default
+    /// sign-in scope). Used by the repo picker (#15).
+    func fetchAccessibleRepos() async throws -> [String] {
+        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
+        components.path = "/user/repos"
+        components.queryItems = [
+            URLQueryItem(name: "per_page", value: "100"),
+            URLQueryItem(name: "sort", value: "full_name"),
+        ]
+        let dtos: [GitHubRepoDTO] = try await fetchAllPages(url: components.url!)
+        return dtos.map(\.fullName)
     }
 
     private func alertsURL(owner: String, repo: String, path: String) -> URL {

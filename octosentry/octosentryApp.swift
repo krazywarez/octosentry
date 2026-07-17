@@ -15,10 +15,11 @@ enum SecurityEventWindow {
 struct octosentryApp: App {
     @State private var store = SecurityEventStore()
     @State private var authStore = AuthStore()
+    @State private var updateStore = UpdateStore()
 
     var body: some Scene {
         MenuBarExtra {
-            SecurityEventListView(store: store, authStore: authStore)
+            SecurityEventListView(store: store, authStore: authStore, updateStore: updateStore)
                 .frame(width: 380, height: 420)
         } label: {
             MenuBarIconView(criticalCount: store.unseenCriticalCount)
@@ -26,7 +27,7 @@ struct octosentryApp: App {
         .menuBarExtraStyle(.window)
 
         Window("Security Events", id: SecurityEventWindow.id) {
-            SecurityEventListView(store: store, authStore: authStore, isStandaloneWindow: true)
+            SecurityEventListView(store: store, authStore: authStore, updateStore: updateStore, isStandaloneWindow: true)
                 .frame(minWidth: 420, minHeight: 480)
         }
     }

@@ -15,10 +15,14 @@ actor GitHubDeviceAuthClient {
     // Not a secret — safe to embed in source.
     private let clientID = "Ov23li6tqaTghDc4IJYv"
 
-    // Grants Dependabot/code scanning/secret scanning alert access. Classic OAuth
-    // scopes have no read-only variant (unlike fine-grained PATs); this is the
-    // narrowest scope GitHub offers for these three endpoints via OAuth Apps.
-    private let scope = "security_events"
+    // Default sign-in scope: grants Dependabot/code scanning/secret scanning alert
+    // access. Classic OAuth scopes have no read-only variant (unlike fine-grained
+    // PATs); this is the narrowest scope GitHub offers for these three endpoints.
+    static let defaultScope = "security_events"
+
+    // Broader scope requested only on demand (repo picker, #15) — never the
+    // default, since it's a real increase in blast radius over defaultScope alone.
+    static let repoAccessScope = "security_events repo"
 
     private let session: URLSession
 
@@ -26,7 +30,7 @@ actor GitHubDeviceAuthClient {
         self.session = session
     }
 
-    func requestDeviceCode() async throws -> DeviceCodeResponse {
+    func requestDeviceCode(scope: String) async throws -> DeviceCodeResponse {
         let data = try await post(
             url: URL(string: "https://github.com/login/device/code")!,
             parameters: ["client_id": clientID, "scope": scope]
