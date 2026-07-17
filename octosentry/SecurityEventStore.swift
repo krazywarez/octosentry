@@ -28,6 +28,10 @@ final class SecurityEventStore {
     private(set) var watchedRepos: [String] = []
     private(set) var watchListErrorMessage: String?
 
+    var unseenCriticalCount: Int {
+        rawEvents.filter { $0.severity == .critical && !$0.seenLocally }.count
+    }
+
     private let persistenceStore = PersistenceStore()
     private var rawEvents: [SecurityEvent] = []
     private var pollingTask: Task<Void, Never>?
@@ -128,6 +132,18 @@ final class SecurityEventStore {
         watchedRepos = state.watchedRepos
 
         await refresh()
+    }
+
+    /// Local-only triage state (spec §11) — no API write, no scope beyond
+    /// read needed. Removes the event from the active stream.
+    func markSeen(_ eventID: String) async {
+        var state = await persistenceStore.load()
+        state.seenEventIDs.insert(eventID)
+        await persistenceStore.save(state)
+
+        rawEvents.removeAll { $0.id == eventID }
+        totalFetchedCount = rawEvents.count
+        applyMinimumSeverityFilter()
     }
 
     func removeRepo(_ repoFullName: String) async {

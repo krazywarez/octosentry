@@ -9,7 +9,9 @@ import SwiftUI
 struct SecurityEventListView: View {
     var store: SecurityEventStore
     var authStore: AuthStore
+    var isStandaloneWindow: Bool = false
     @State private var showingRepoManager = false
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -23,7 +25,6 @@ struct SecurityEventListView: View {
                 content
             }
         }
-        .frame(width: 380, height: 420)
         .task(id: authStore.isSignedIn) {
             guard authStore.isSignedIn else { return }
             await store.refresh()
@@ -66,6 +67,16 @@ struct SecurityEventListView: View {
             }
 
             if authStore.isSignedIn {
+                if !isStandaloneWindow {
+                    Button {
+                        openWindow(id: SecurityEventWindow.id)
+                    } label: {
+                        Image(systemName: "macwindow")
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open in Window")
+                }
+
                 Button {
                     showingRepoManager.toggle()
                 } label: {
@@ -116,7 +127,9 @@ struct SecurityEventListView: View {
                         Divider()
                     }
                     ForEach(store.events) { event in
-                        SecurityEventRow(event: event)
+                        SecurityEventRow(event: event) {
+                            Task { await store.markSeen(event.id) }
+                        }
                         Divider()
                     }
                 }
@@ -250,4 +263,5 @@ private struct StatusView: View {
 
 #Preview {
     SecurityEventListView(store: SecurityEventStore(), authStore: AuthStore())
+        .frame(width: 380, height: 420)
 }
