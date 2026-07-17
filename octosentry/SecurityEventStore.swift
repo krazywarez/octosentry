@@ -3,8 +3,8 @@
 //  octosentry
 //
 //  Holds the fetched event stream for the popover. Watch list, seen-state,
-//  and last-fetch timestamps are persisted (see PersistedState); the PAT
-//  is still read from GITHUB_TOKEN as a dev-only shortcut (spec §13).
+//  and last-fetch timestamps are persisted (see PersistedState); the token
+//  comes from Keychain, put there by the device authorization flow (spec §6).
 //
 //  Each alert source is fetched independently, per repo, so a problem
 //  with one endpoint (or one repo) doesn't blank out the rest. A 403/404
@@ -42,8 +42,8 @@ final class SecurityEventStore {
         minimumSeverity = state.minimumSeverity
         watchedRepos = state.watchedRepos
 
-        guard let token = ProcessInfo.processInfo.environment["GITHUB_TOKEN"], !token.isEmpty else {
-            errorMessages = [GitHubAPIError.missingToken.errorDescription ?? "Missing GITHUB_TOKEN."]
+        guard let token = KeychainTokenStore.load() else {
+            errorMessages = [GitHubAPIError.missingToken.errorDescription ?? "Not signed in."]
             return
         }
 

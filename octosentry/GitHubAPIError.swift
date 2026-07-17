@@ -19,7 +19,7 @@ enum GitHubAPIError: Error, LocalizedError, Sendable {
     var errorDescription: String? {
         switch self {
         case .missingToken:
-            "No GitHub token found in the GITHUB_TOKEN environment variable."
+            "Not signed in to GitHub."
         case .network(let message):
             "Network error: \(message)"
         case .invalidResponse:

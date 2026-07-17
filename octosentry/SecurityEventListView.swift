@@ -8,20 +8,24 @@ import SwiftUI
 
 struct SecurityEventListView: View {
     var store: SecurityEventStore
+    var authStore: AuthStore
     @State private var showingRepoManager = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider()
-            if showingRepoManager {
-                RepoManagerView(store: store)
+            if !authStore.isSignedIn {
+                SignInView(authStore: authStore)
+            } else if showingRepoManager {
+                RepoManagerView(store: store, authStore: authStore)
             } else {
                 content
             }
         }
         .frame(width: 380, height: 420)
-        .task {
+        .task(id: authStore.isSignedIn) {
+            guard authStore.isSignedIn else { return }
             await store.refresh()
             store.startPolling()
         }
@@ -39,7 +43,7 @@ struct SecurityEventListView: View {
 
             Spacer()
 
-            if !showingRepoManager {
+            if authStore.isSignedIn && !showingRepoManager {
                 Picker("Minimum severity", selection: Binding(
                     get: { store.minimumSeverity },
                     set: { newValue in Task { await store.setMinimumSeverity(newValue) } }
@@ -61,12 +65,14 @@ struct SecurityEventListView: View {
                 .disabled(store.isLoading)
             }
 
-            Button {
-                showingRepoManager.toggle()
-            } label: {
-                Image(systemName: showingRepoManager ? "xmark.circle" : "gearshape")
+            if authStore.isSignedIn {
+                Button {
+                    showingRepoManager.toggle()
+                } label: {
+                    Image(systemName: showingRepoManager ? "xmark.circle" : "gearshape")
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
 
             Button("Quit") {
                 NSApplication.shared.terminate(nil)
@@ -121,6 +127,7 @@ struct SecurityEventListView: View {
 
 private struct RepoManagerView: View {
     var store: SecurityEventStore
+    var authStore: AuthStore
     @State private var newRepoText = ""
 
     var body: some View {
@@ -167,6 +174,14 @@ private struct RepoManagerView: View {
             }
 
             Spacer()
+
+            Divider()
+
+            Button("Sign Out") {
+                authStore.signOut()
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.red)
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -234,5 +249,5 @@ private struct StatusView: View {
 }
 
 #Preview {
-    SecurityEventListView(store: SecurityEventStore())
+    SecurityEventListView(store: SecurityEventStore(), authStore: AuthStore())
 }

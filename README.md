@@ -14,33 +14,32 @@ just a fast triage view that deep-links out to github.com to act.
 - Click an alert to open it directly on github.com
 - Errors and unavailable sources (e.g. an alert type disabled for a repo)
   are surfaced in the popover instead of failing silently
+- Add or remove watched repos from the popover; a background poll keeps
+  the feed fresh even while it's closed
+- Sign in with GitHub via device authorization — no password or manually
+  generated token needed, and nothing is ever typed into the app itself
 - Zero third-party dependencies — pure SwiftUI and URLSession
 
 ## Requirements
 
 - macOS 14 or later
-- A GitHub personal access token (fine-grained or classic) with read
-  access to Dependabot alerts, code scanning alerts, and secret scanning
-  alerts for the repo you want to watch
+- A GitHub account with access to whatever repos you want to watch
 
 ## Usage
 
-octosentry currently watches a single, hardcoded repo and reads its
-GitHub token from the `GITHUB_TOKEN` environment variable — this is a
-development-only shortcut ahead of a proper device authorization flow.
-
 1. Build and run the app (see Building, below).
-2. Set `GITHUB_TOKEN` in your **personal, non-shared** Xcode scheme
-   (Product → Scheme → Edit Scheme… → Run → Arguments →
-   Environment Variables). Don't add it to a shared scheme — that would
-   commit the token to git.
-3. Click the shield icon in the menu bar to open the popover. It fetches
-   automatically on open, or use the refresh button.
+2. Click the shield icon in the menu bar, then **Sign in with GitHub**.
+   You'll get a short code — click **Open GitHub**, enter the code there,
+   and authorize. The popover updates automatically once that completes.
+3. Click the gear icon to add or remove watched repos (`owner/repo`).
 4. Click any alert to open it on github.com.
 
 If a source shows as unavailable, it usually means that alert type is
-disabled for the repo, or the token is missing that one permission — not
-that something is broken.
+disabled for the repo, or your account lacks permission for it — not
+that something is broken. Classic OAuth's `security_events` scope
+(what device flow grants) may not be sufficient for Dependabot alerts on
+private repos — if you hit that, it needs verifying against a real
+private repo case by case.
 
 ## Building
 
