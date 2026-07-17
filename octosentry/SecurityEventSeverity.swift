@@ -5,7 +5,7 @@
 
 import SwiftUI
 
-enum SecurityEventSeverity: Int, Codable, Comparable, CaseIterable {
+nonisolated enum SecurityEventSeverity: Int, Codable, Comparable, CaseIterable, Hashable {
     case low
     case medium
     case high
