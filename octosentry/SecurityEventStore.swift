@@ -121,13 +121,21 @@ final class SecurityEventStore {
             watchListErrorMessage = "Enter a repo as \"owner/repo\"."
             return
         }
+        // Store the canonical "owner/repo" rather than the raw input, so
+        // stray slashes (e.g. "owner/repo/") can't produce a malformed
+        // entry that silently 404s on refresh.
+        let repoFullName = "\(parts[0])/\(parts[1])"
 
         var state = await persistenceStore.load()
-        guard !state.watchedRepos.contains(trimmed) else {
-            watchListErrorMessage = "\(trimmed) is already watched."
+        // GitHub owner/repo names are case-insensitive, so treat entries
+        // that differ only in case as the same watched repo.
+        guard !state.watchedRepos.contains(where: {
+            $0.caseInsensitiveCompare(repoFullName) == .orderedSame
+        }) else {
+            watchListErrorMessage = "\(repoFullName) is already watched."
             return
         }
-        state.watchedRepos.append(trimmed)
+        state.watchedRepos.append(repoFullName)
         await persistenceStore.save(state)
         watchedRepos = state.watchedRepos
 
