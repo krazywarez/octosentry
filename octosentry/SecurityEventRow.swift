@@ -74,7 +74,7 @@ struct SecurityEventRow: View {
         event: SecurityEvent(
             id: "preview-1",
             source: .dependabot,
-            repoFullName: "zerolabsco/octosentry",
+            repoFullName: "krazywarez/octosentry",
             severity: .critical,
             nativeSeverityLabel: "Critical",
             summary: "Denial of service in some-package",
