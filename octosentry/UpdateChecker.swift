@@ -14,7 +14,7 @@ import Foundation
 
 actor UpdateChecker {
     private let session: URLSession
-    private let repoOwner = "zerolabsco"
+    private let repoOwner = "krazywarez"
     private let repoName = "octosentry"
 
     init(session: URLSession = .shared) {

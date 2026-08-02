@@ -36,11 +36,11 @@ The update checker (`UpdateStore`) links there.
 
 ## Homebrew
 
-Published at [zerolabsco/homebrew-tap](https://github.com/zerolabsco/homebrew-tap).
+Published at [krazywarez/homebrew-tap](https://github.com/krazywarez/homebrew-tap).
 Users install via:
 
 ```bash
-brew tap zerolabsco/tap
+brew tap krazywarez/tap
 brew install --cask octosentry
 ```
 
@@ -49,7 +49,7 @@ Per release, after uploading the new DMG to its GitHub Release:
 1. `shasum -a 256 build/octosentry-<version>.dmg`
 2. Update `version` and `sha256` in [Casks/octosentry.rb](Casks/octosentry.rb)
    (kept here for reference — the canonical copy lives in the tap repo).
-3. Copy the updated file into a local clone of `zerolabsco/homebrew-tap`,
+3. Copy the updated file into a local clone of `krazywarez/homebrew-tap`,
    commit, and push.
 
 ## Version bumps
