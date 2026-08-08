@@ -44,9 +44,6 @@ nonisolated enum SeverityMapping {
     /// Secret scanning has no native severity field. Per spec: validated/active
     /// secrets are treated as critical, unvalidated ones as high.
     static func secretScanning(validity: String?) -> SecurityEventSeverity {
-        switch validity?.lowercased() {
-        case "active": .critical
-        default: .high
-        }
+        validity?.lowercased() == "active" ? .critical : .high
     }
 }
