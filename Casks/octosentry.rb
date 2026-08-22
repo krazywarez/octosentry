@@ -5,8 +5,8 @@
 #   brew tap krazywarez/tap && brew install --cask octosentry
 
 cask "octosentry" do
-  version "1.0.0"
-  sha256 "33c5b89ce817d5be7bacc8d6fe5e2ff5678b071e50eba0270ef31de32fc4566a"
+  version "1.1"
+  sha256 "8f53ce0c4810d6590f8095e983da53a5afc3938ac94333bdb1d9846bb86ec48a"
 
   url "https://github.com/krazywarez/octosentry/releases/download/#{version}/octosentry-#{version}.dmg"
   name "octosentry"
