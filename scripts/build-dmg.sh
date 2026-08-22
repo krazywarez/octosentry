@@ -60,7 +60,21 @@ xcodebuild -exportArchive \
 
 APP_PATH="$EXPORT_PATH/octosentry.app"
 
-echo "==> Notarizing"
+# The app is notarized and stapled before it goes into the DMG, then the DMG
+# is notarized and stapled in turn. Stapling only the DMG leaves the app
+# itself without a ticket: once a user drags it to /Applications the disk
+# image is gone, and a machine that is offline has nothing local to check the
+# notarization against. Two submissions, but each artifact carries its own
+# ticket.
+echo "==> Notarizing app"
+APP_ZIP="$BUILD_DIR/octosentry.zip"
+ditto -c -k --keepParent "$APP_PATH" "$APP_ZIP"
+xcrun notarytool submit "$APP_ZIP" --keychain-profile "$NOTARY_PROFILE" --wait
+
+echo "==> Stapling ticket to app"
+xcrun stapler staple "$APP_PATH"
+
+echo "==> Building DMG"
 DMG_STAGING="$BUILD_DIR/staging"
 mkdir -p "$DMG_STAGING"
 cp -R "$APP_PATH" "$DMG_STAGING/"
@@ -68,9 +82,10 @@ ln -s /Applications "$DMG_STAGING/Applications"
 
 hdiutil create -volname "octosentry" -srcfolder "$DMG_STAGING" -ov -format UDZO "$DMG_PATH"
 
+echo "==> Notarizing DMG"
 xcrun notarytool submit "$DMG_PATH" --keychain-profile "$NOTARY_PROFILE" --wait
 
-echo "==> Stapling notarization ticket"
+echo "==> Stapling ticket to DMG"
 xcrun stapler staple "$DMG_PATH"
 
 echo "==> Done: $DMG_PATH"
