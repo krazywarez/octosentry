@@ -13,7 +13,7 @@ jobs:
   test:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The runner defaults to Xcode 16.4, whose strict-concurrency checking
       # rejects SecurityEventStore's async-let fetches. Pin to the newest
