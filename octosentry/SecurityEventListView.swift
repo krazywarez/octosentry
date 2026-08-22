@@ -313,7 +313,7 @@ struct SecurityEventListView: View {
                                 : nil,
                             isHidden: store.triage.isHidden(event.id, now: .now),
                             snoozedUntil: store.triage.snoozedUntil(event.id, now: .now),
-                            onMarkSeen: { Task { await store.markSeen(event.id) } },
+                            onToggleSeen: { Task { await store.setSeen(event.id, !event.seenLocally) } },
                             onDismiss: { Task { await store.dismiss(event.id) } },
                             onSnooze: { duration in
                                 Task { await store.snooze(event.id, until: duration.date(from: .now)) }
