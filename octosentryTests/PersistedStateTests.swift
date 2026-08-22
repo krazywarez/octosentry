@@ -32,7 +32,8 @@ struct PersistedStateTests {
             lastFetchByRepo: ["octocat/hello-world": fetchedAt],
             minimumSeverity: .high,
             hasRepoScope: true,
-            sortOrder: .repo
+            sortOrder: .repo,
+            notifiedEventIDsByRepo: ["octocat/hello-world": ["dependabot-octocat/hello-world-1"]]
         )
 
         let decoded = try Self.decoder.decode(
@@ -46,6 +47,7 @@ struct PersistedStateTests {
         #expect(decoded.minimumSeverity == original.minimumSeverity)
         #expect(decoded.hasRepoScope == original.hasRepoScope)
         #expect(decoded.sortOrder == original.sortOrder)
+        #expect(decoded.notifiedEventIDsByRepo == original.notifiedEventIDsByRepo)
     }
 
     @Test func encodesTheKeysOnDiskReadersDependOn() throws {
@@ -57,6 +59,9 @@ struct PersistedStateTests {
         #expect(Set(object.keys) == [
             "watchedRepos", "seenEventIDs", "lastFetchByRepo", "minimumSeverity", "hasRepoScope", "sortOrder",
         ])
+        // notifiedEventIDsByRepo is optional and nil on the placeholder, so it
+        // encodes to nothing rather than a null.
+        #expect(object["notifiedEventIDsByRepo"] == nil)
     }
 
     // A state.json written before hasRepoScope and sortOrder existed must still load.
@@ -77,6 +82,7 @@ struct PersistedStateTests {
         #expect(state.minimumSeverity == .medium)
         #expect(state.hasRepoScope == false)
         #expect(state.sortOrder == .severity)
+        #expect(state.notifiedEventIDsByRepo == nil)
     }
 
     @Test func rejectsStateMissingARequiredField() {
