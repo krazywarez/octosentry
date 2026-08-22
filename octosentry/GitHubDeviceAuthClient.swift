@@ -12,8 +12,12 @@ import Foundation
 
 actor GitHubDeviceAuthClient {
     // Public client identifier for the "octosentry" OAuth App (Device Flow enabled).
-    // Not a secret — safe to embed in source.
-    private let clientID = "Ov23li6tqaTghDc4IJYv"
+    // Not a secret — safe to embed in source. A GitHub Enterprise Server
+    // instance needs its own admin-registered app instead (#20).
+    static let dotComClientID = "Ov23li6tqaTghDc4IJYv"
+
+    private let host: GitHubHost
+    private var clientID: String { host.clientID ?? Self.dotComClientID }
 
     // Default sign-in scope: grants Dependabot/code scanning/secret scanning alert
     // access. Classic OAuth scopes have no read-only variant (unlike fine-grained
@@ -26,13 +30,14 @@ actor GitHubDeviceAuthClient {
 
     private let session: URLSession
 
-    init(session: URLSession = .shared) {
+    init(host: GitHubHost = .dotCom, session: URLSession = .shared) {
+        self.host = host
         self.session = session
     }
 
     func requestDeviceCode(scope: String) async throws -> DeviceCodeResponse {
         let data = try await post(
-            url: URL(string: "https://github.com/login/device/code")!,
+            url: host.deviceCodeURL,
             parameters: ["client_id": clientID, "scope": scope]
         )
         do {
@@ -52,7 +57,7 @@ actor GitHubDeviceAuthClient {
             try Task.checkCancellation()
 
             let data = try await post(
-                url: URL(string: "https://github.com/login/oauth/access_token")!,
+                url: host.accessTokenURL,
                 parameters: [
                     "client_id": clientID,
                     "device_code": deviceCode,

@@ -111,7 +111,7 @@ final class SecurityEventStore {
                 errors.append("\(repoFullName): no signed-in account can reach this repo.")
                 continue
             }
-            let client = GitHubSecurityAPIClient(token: token)
+            let client = GitHubSecurityAPIClient(token: token, host: account.host)
             let label = accountsByID.count > 1
                 ? "\(repoFullName) (\(account.displayName))"
                 : repoFullName
@@ -257,7 +257,7 @@ final class SecurityEventStore {
         guard let token = KeychainTokenStore.load(account: account.keychainAccount) else {
             throw GitHubAPIError.missingToken
         }
-        return try await GitHubSecurityAPIClient(token: token).fetchAccessibleRepos()
+        return try await GitHubSecurityAPIClient(token: token, host: account.host).fetchAccessibleRepos()
     }
 
     /// Local-only triage state (spec §11) — no API write, no scope beyond

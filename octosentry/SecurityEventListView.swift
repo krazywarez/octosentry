@@ -347,6 +347,8 @@ private struct RepoManagerView: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(Color.accentColor)
 
+                EnterpriseSignInView(authStore: authStore)
+
                 if let errorMessage = store.watchListErrorMessage {
                     Text(errorMessage)
                         .font(.caption2)
@@ -485,7 +487,7 @@ private struct RepoManagerView: View {
 
     private func startBrowsing(_ account: Account) {
         guard account.hasRepoScope else {
-            authStore.requestRepoAccess()
+            authStore.requestRepoAccess(host: account.host)
             return
         }
         browsingAccount = account
@@ -506,6 +508,52 @@ private struct RepoManagerView: View {
         newRepoText = ""
         addingToAccountID = nil
         Task { await store.addRepo(text, accountID: account.id) }
+    }
+}
+
+/// Signing in to a GitHub Enterprise Server instance. Collapsed by default —
+/// most people are on github.com, and GHES needs details they have to get
+/// from an instance admin.
+private struct EnterpriseSignInView: View {
+    var authStore: AuthStore
+    @State private var isExpanded = false
+    @State private var hostText = ""
+    @State private var clientIDText = ""
+
+    private var host: GitHubHost {
+        GitHubHost(host: hostText, clientID: clientIDText)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                isExpanded.toggle()
+            } label: {
+                Label("Add a GitHub Enterprise account", systemImage: "building.2")
+                    .font(.caption)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.accentColor)
+
+            if isExpanded {
+                TextField("github.example.com", text: $hostText)
+                    .textFieldStyle(.roundedBorder)
+                TextField("OAuth app client ID", text: $clientIDText)
+                    .textFieldStyle(.roundedBorder)
+
+                Text("Device flow on Enterprise Server needs an OAuth app registered on the instance. Ask an admin for its client ID.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+
+                Button("Sign In") {
+                    authStore.addAccount(host: host)
+                    isExpanded = false
+                    hostText = ""
+                    clientIDText = ""
+                }
+                .disabled(host.isDotCom || host.clientID == nil)
+            }
+        }
     }
 }
 
