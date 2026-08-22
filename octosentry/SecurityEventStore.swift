@@ -172,7 +172,11 @@ final class SecurityEventStore {
 
         // Only prune against a complete picture: if a repo failed this round
         // its alerts are missing, and pruning would forget they were hidden.
-        if fetchedEventsByRepo.count == Set(state.watchedRepos.map(\.fullName)).count {
+        // An empty watch list is not a complete picture either — it carries no
+        // information, and treating it as one would drop every dismissal and
+        // record every tracked alert as resolved.
+        let watchedRepoNames = Set(state.watchedRepos.map(\.fullName))
+        if !watchedRepoNames.isEmpty, fetchedEventsByRepo.count == watchedRepoNames.count {
             let now = Date()
             state.triage = state.triage.pruned(
                 presentEventIDs: Set(fetchedEvents.map(\.id)),
