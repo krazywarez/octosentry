@@ -13,7 +13,7 @@ import Foundation
 actor GitHubSecurityAPIClient {
     private let token: String
     private let session: URLSession
-    private let baseURL = URL(string: "https://api.github.com")!
+    private let baseURL: URL
 
     private static let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
@@ -21,8 +21,9 @@ actor GitHubSecurityAPIClient {
         return decoder
     }()
 
-    init(token: String, session: URLSession = .shared) {
+    init(token: String, host: GitHubHost = .dotCom, session: URLSession = .shared) {
         self.token = token
+        self.baseURL = host.apiBaseURL
         self.session = session
     }
 
@@ -94,7 +95,7 @@ actor GitHubSecurityAPIClient {
     /// sign-in scope). Used by the repo picker (#15).
     func fetchAccessibleRepos() async throws -> [String] {
         var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
-        components.path = "/user/repos"
+        components.path = baseURL.path + "/user/repos"
         components.queryItems = [
             URLQueryItem(name: "per_page", value: "100"),
             URLQueryItem(name: "sort", value: "full_name"),
@@ -107,14 +108,14 @@ actor GitHubSecurityAPIClient {
     /// alerts attributed. Needs no scope beyond a valid user token.
     func fetchCurrentUser() async throws -> GitHubUserDTO {
         var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
-        components.path = "/user"
+        components.path = baseURL.path + "/user"
         let (data, _) = try await fetchData(url: components.url!)
         return try decode(data)
     }
 
     private func alertsURL(owner: String, repo: String, path: String) -> URL {
         var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
-        components.path = "/repos/\(owner)/\(repo)/\(path)"
+        components.path = baseURL.path + "/repos/\(owner)/\(repo)/\(path)"
         components.queryItems = [
             URLQueryItem(name: "state", value: "open"),
             URLQueryItem(name: "per_page", value: "100"),
