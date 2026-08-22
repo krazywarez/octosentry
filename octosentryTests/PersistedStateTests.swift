@@ -65,7 +65,7 @@ struct PersistedStateTests {
 
         #expect(Set(object.keys) == [
             "watchedRepos", "seenEventIDs", "lastFetchByRepo", "minimumSeverity", "hasRepoScope", "sortOrder",
-            "triage",
+            "triage", "history",
         ])
         // notifiedEventIDsByRepo is optional and nil on the placeholder, so it
         // encodes to nothing rather than a null.
@@ -92,6 +92,7 @@ struct PersistedStateTests {
         #expect(state.sortOrder == .severity)
         #expect(state.notifiedEventIDsByRepo == nil)
         #expect(state.triage == AlertTriage())
+        #expect(state.history == AlertHistory())
     }
 
     @Test func rejectsStateMissingARequiredField() {

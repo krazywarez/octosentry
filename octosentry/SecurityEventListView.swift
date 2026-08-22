@@ -13,6 +13,7 @@ struct SecurityEventListView: View {
     var updateStore: UpdateStore
     var isStandaloneWindow: Bool = false
     @State private var showingRepoManager = false
+    @State private var showingHistory = false
     @State private var exportErrorMessage: String?
     @Environment(\.openWindow) private var openWindow
 
@@ -27,6 +28,8 @@ struct SecurityEventListView: View {
                 SignInView(authStore: authStore)
             } else if showingRepoManager {
                 RepoManagerView(store: store, authStore: authStore)
+            } else if showingHistory {
+                AlertHistoryView(store: store)
             } else {
                 filterBar
                 Divider()
@@ -87,7 +90,7 @@ struct SecurityEventListView: View {
 
             Spacer()
 
-            if authStore.isSignedIn && !showingRepoManager {
+            if authStore.isSignedIn && !showingRepoManager && !showingHistory {
                 Picker("Minimum severity", selection: Binding(
                     get: { store.minimumSeverity },
                     set: { newValue in Task { await store.setMinimumSeverity(newValue) } }
@@ -123,7 +126,15 @@ struct SecurityEventListView: View {
             }
 
             if authStore.isSignedIn {
-                if !isStandaloneWindow {
+                if isStandaloneWindow {
+                    Button {
+                        showingHistory.toggle()
+                    } label: {
+                        Image(systemName: showingHistory ? "list.bullet" : "chart.xyaxis.line")
+                    }
+                    .buttonStyle(.plain)
+                    .help(showingHistory ? "Back to alerts" : "Trends")
+                } else {
                     Button {
                         openWindow(id: SecurityEventWindow.id)
                     } label: {
