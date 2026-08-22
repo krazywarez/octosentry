@@ -20,9 +20,37 @@ nonisolated struct Account: Codable, Equatable, Identifiable, Hashable {
     var login: String
     var keychainAccount: String
     var hasRepoScope: Bool
+    /// Which GitHub this account lives on. Absent in files written before
+    /// Enterprise support, which means github.com.
+    var host: GitHubHost = .dotCom
+
+    enum CodingKeys: String, CodingKey {
+        case id, login, keychainAccount, hasRepoScope, host
+    }
+
+    init(id: Int, login: String, keychainAccount: String, hasRepoScope: Bool, host: GitHubHost = .dotCom) {
+        self.id = id
+        self.login = login
+        self.keychainAccount = keychainAccount
+        self.hasRepoScope = hasRepoScope
+        self.host = host
+    }
+
+    // Synthesized decoding ignores property defaults, so an account written
+    // before Enterprise support would fail to decode and take the whole
+    // state file down with it.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(Int.self, forKey: .id)
+        login = try container.decode(String.self, forKey: .login)
+        keychainAccount = try container.decode(String.self, forKey: .keychainAccount)
+        hasRepoScope = try container.decode(Bool.self, forKey: .hasRepoScope)
+        host = try container.decodeIfPresent(GitHubHost.self, forKey: .host) ?? .dotCom
+    }
 
     var displayName: String {
-        login.isEmpty ? "GitHub account" : login
+        let name = login.isEmpty ? "GitHub account" : login
+        return host.isDotCom ? name : "\(name) @ \(host.displayName)"
     }
 
     /// The account an upgrading install already has a token for.
@@ -31,16 +59,21 @@ nonisolated struct Account: Codable, Equatable, Identifiable, Hashable {
             id: 0,
             login: "",
             keychainAccount: KeychainTokenStore.legacyAccount,
-            hasRepoScope: false
+            hasRepoScope: false,
+            host: .dotCom
         )
     }
 
-    static func new(id: Int, login: String, hasRepoScope: Bool) -> Account {
-        Account(
+    static func new(id: Int, login: String, hasRepoScope: Bool, host: GitHubHost = .dotCom) -> Account {
+        // Ids are only unique within an instance, so a GHES account's
+        // Keychain item is namespaced by host too.
+        let suffix = host.isDotCom ? "\(id)" : "\(host.displayName)-\(id)"
+        return Account(
             id: id,
             login: login,
-            keychainAccount: "account-\(id)",
-            hasRepoScope: hasRepoScope
+            keychainAccount: "account-\(suffix)",
+            hasRepoScope: hasRepoScope,
+            host: host
         )
     }
 }

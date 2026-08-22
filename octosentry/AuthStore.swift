@@ -21,7 +21,6 @@ final class AuthStore {
     private(set) var errorMessage: String?
     private(set) var accounts: [Account] = []
 
-    private let client = GitHubDeviceAuthClient()
     private let persistenceStore = PersistenceStore()
     private var authorizationTask: Task<Void, Never>?
 
@@ -43,21 +42,22 @@ final class AuthStore {
         accounts.contains(where: \.hasRepoScope)
     }
 
-    func signIn() {
-        beginAuthorization(scope: GitHubDeviceAuthClient.defaultScope)
+    func signIn(host: GitHubHost = .dotCom) {
+        beginAuthorization(scope: GitHubDeviceAuthClient.defaultScope, host: host)
     }
 
-    /// Adds another identity. Same flow as signing in — GitHub decides which
-    /// account authorizes the code.
-    func addAccount() {
-        beginAuthorization(scope: GitHubDeviceAuthClient.defaultScope)
+    /// Adds another identity, optionally on a GitHub Enterprise Server
+    /// instance. Same flow either way — GitHub decides which account
+    /// authorizes the code.
+    func addAccount(host: GitHubHost = .dotCom) {
+        beginAuthorization(scope: GitHubDeviceAuthClient.defaultScope, host: host)
     }
 
     /// Re-runs device auth with broader scope so the repo picker can list
     /// repos. Only called explicitly from the repo picker UI, never on
     /// the default sign-in path.
-    func requestRepoAccess() {
-        beginAuthorization(scope: GitHubDeviceAuthClient.repoAccessScope)
+    func requestRepoAccess(host: GitHubHost = .dotCom) {
+        beginAuthorization(scope: GitHubDeviceAuthClient.repoAccessScope, host: host)
     }
 
     /// Signs out one account, leaving the others alone.
@@ -121,7 +121,7 @@ final class AuthStore {
 
         for account in unresolved {
             guard let token = KeychainTokenStore.load(account: account.keychainAccount),
-                  let user = try? await GitHubSecurityAPIClient(token: token).fetchCurrentUser(),
+                  let user = try? await GitHubSecurityAPIClient(token: token, host: account.host).fetchCurrentUser(),
                   let index = persisted.accounts.firstIndex(where: { $0.keychainAccount == account.keychainAccount })
             else { continue }
 
@@ -143,13 +143,14 @@ final class AuthStore {
         }
     }
 
-    private func beginAuthorization(scope: String) {
+    private func beginAuthorization(scope: String, host: GitHubHost) {
         guard authorizationTask == nil else { return }
         errorMessage = nil
 
         authorizationTask = Task {
             defer { authorizationTask = nil }
             do {
+                let client = GitHubDeviceAuthClient(host: host)
                 let deviceCode = try await client.requestDeviceCode(scope: scope)
                 state = .awaitingAuthorization(userCode: deviceCode.userCode, verificationURL: deviceCode.verificationUri)
 
@@ -158,7 +159,7 @@ final class AuthStore {
                     interval: deviceCode.interval,
                     expiresIn: deviceCode.expiresIn
                 )
-                try await register(token: token, grantedRepoScope: scope.contains("repo"))
+                try await register(token: token, grantedRepoScope: scope.contains("repo"), host: host)
                 state = .signedIn
             } catch {
                 errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
@@ -173,30 +174,36 @@ final class AuthStore {
     /// Stores a freshly authorized token under its own Keychain item and
     /// records the account. Re-authorizing an account already present updates
     /// it in place rather than adding a duplicate.
-    private func register(token: String, grantedRepoScope: Bool) async throws {
-        let user = try await GitHubSecurityAPIClient(token: token).fetchCurrentUser()
+    private func register(token: String, grantedRepoScope: Bool, host: GitHubHost) async throws {
+        let user = try await GitHubSecurityAPIClient(token: token, host: host).fetchCurrentUser()
 
         var persisted = await persistenceStore.load()
 
-        if let index = persisted.accounts.firstIndex(where: { $0.id == user.id }) {
+        if let index = persisted.accounts.firstIndex(where: { $0.id == user.id && $0.host == host }) {
             persisted.accounts[index].login = user.login
             persisted.accounts[index].hasRepoScope = grantedRepoScope
             try KeychainTokenStore.save(token, account: persisted.accounts[index].keychainAccount)
-        } else if let index = persisted.accounts.firstIndex(where: { $0.id == 0 }) {
+        } else if host.isDotCom, let index = persisted.accounts.firstIndex(where: { $0.id == 0 }) {
             // The adopted single-account entry, now identified.
             let keychainAccount = persisted.accounts[index].keychainAccount
             persisted.accounts[index] = Account(
                 id: user.id,
                 login: user.login,
                 keychainAccount: keychainAccount,
-                hasRepoScope: grantedRepoScope
+                hasRepoScope: grantedRepoScope,
+                host: host
             )
             for repoIndex in persisted.watchedRepos.indices where persisted.watchedRepos[repoIndex].accountID == 0 {
                 persisted.watchedRepos[repoIndex].accountID = user.id
             }
             try KeychainTokenStore.save(token, account: keychainAccount)
         } else {
-            let account = Account.new(id: user.id, login: user.login, hasRepoScope: grantedRepoScope)
+            let account = Account.new(
+                id: user.id,
+                login: user.login,
+                hasRepoScope: grantedRepoScope,
+                host: host
+            )
             try KeychainTokenStore.save(token, account: account.keychainAccount)
             persisted.accounts.append(account)
         }
