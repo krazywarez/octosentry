@@ -1,7 +1,7 @@
 # Homebrew Cask for octosentry (spec §9: DMG/Homebrew distribution channel).
 #
-# Canonical copy lives in krazywarez/homebrew-tap — this one is kept in sync
-# here for reference. Users install via:
+# Mirrored between krazywarez/octosentry and krazywarez/homebrew-tap. The tap's
+# copy is the one `brew install` reads; keep both in sync. Users install via:
 #   brew tap krazywarez/tap && brew install --cask octosentry
 
 cask "octosentry" do
@@ -17,7 +17,5 @@ cask "octosentry" do
 
   app "octosentry.app"
 
-  zap trash: [
-    "~/Library/Application Support/octosentry",
-  ]
+  zap trash: "~/Library/Application Support/octosentry"
 end
