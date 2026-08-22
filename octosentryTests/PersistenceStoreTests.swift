@@ -34,7 +34,7 @@ struct PersistenceStoreTests {
         defer { try? FileManager.default.removeItem(at: directory) }
 
         let saved = PersistedState(
-            watchedRepos: ["octocat/hello-world"],
+            watchedRepos: [WatchedRepo(fullName: "octocat/hello-world", accountID: 42)],
             seenEventIDs: ["dependabot-octocat/hello-world-1"],
             lastFetchByRepo: ["octocat/hello-world": Date(timeIntervalSince1970: 1_785_000_000)],
             minimumSeverity: .high,

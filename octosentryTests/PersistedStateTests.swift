@@ -27,7 +27,11 @@ struct PersistedStateTests {
     @Test func roundTripsEveryField() throws {
         let fetchedAt = Date(timeIntervalSince1970: 1_785_000_000)
         let original = PersistedState(
-            watchedRepos: ["octocat/hello-world", "octocat/spoon-knife"],
+            accounts: [Account.new(id: 42, login: "octocat", hasRepoScope: true)],
+            watchedRepos: [
+                WatchedRepo(fullName: "octocat/hello-world", accountID: 42),
+                WatchedRepo(fullName: "octocat/spoon-knife", accountID: 42),
+            ],
             seenEventIDs: ["dependabot-octocat/hello-world-1", "codeScanning-octocat/spoon-knife-7"],
             lastFetchByRepo: ["octocat/hello-world": fetchedAt],
             minimumSeverity: .high,
@@ -48,6 +52,7 @@ struct PersistedStateTests {
         )
 
         #expect(decoded.watchedRepos == original.watchedRepos)
+        #expect(decoded.accounts == original.accounts)
         #expect(decoded.seenEventIDs == original.seenEventIDs)
         #expect(decoded.lastFetchByRepo == original.lastFetchByRepo)
         #expect(decoded.minimumSeverity == original.minimumSeverity)
@@ -65,7 +70,7 @@ struct PersistedStateTests {
 
         #expect(Set(object.keys) == [
             "watchedRepos", "seenEventIDs", "lastFetchByRepo", "minimumSeverity", "hasRepoScope", "sortOrder",
-            "triage", "history",
+            "triage", "history", "accounts",
         ])
         // notifiedEventIDsByRepo is optional and nil on the placeholder, so it
         // encodes to nothing rather than a null.
@@ -85,7 +90,9 @@ struct PersistedStateTests {
 
         let state = try Self.decoder.decode(PersistedState.self, from: Data(legacy.utf8))
 
-        #expect(state.watchedRepos == ["octocat/hello-world"])
+        // The pre-multi-account shape was a plain [String].
+        #expect(state.watchedRepos == [WatchedRepo(fullName: "octocat/hello-world", accountID: 0)])
+        #expect(state.accounts.isEmpty)
         #expect(state.seenEventIDs == ["dependabot-octocat/hello-world-1"])
         #expect(state.minimumSeverity == .medium)
         #expect(state.hasRepoScope == false)

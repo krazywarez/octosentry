@@ -103,6 +103,15 @@ actor GitHubSecurityAPIClient {
         return dtos.map(\.fullName)
     }
 
+    /// Identifies whose token this is, so accounts can be told apart and
+    /// alerts attributed. Needs no scope beyond a valid user token.
+    func fetchCurrentUser() async throws -> GitHubUserDTO {
+        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
+        components.path = "/user"
+        let (data, _) = try await fetchData(url: components.url!)
+        return try decode(data)
+    }
+
     private func alertsURL(owner: String, repo: String, path: String) -> URL {
         var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
         components.path = "/repos/\(owner)/\(repo)/\(path)"

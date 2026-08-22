@@ -2,7 +2,8 @@
 //  PersistedState.swift
 //  octosentry
 //
-//  Everything the app remembers across launches: the repo watch list,
+//  Everything the app remembers across launches: the signed-in accounts and
+//  the repo watch list,
 //  local-only seen-state per event, last-fetch timestamp per repo, the
 //  minimum severity filter, the feed sort order, local triage state, the
 //  per-repo alert IDs the notifier has already accounted for, and whether the current token
@@ -15,7 +16,8 @@
 import Foundation
 
 nonisolated struct PersistedState: Codable {
-    var watchedRepos: [String]
+    var accounts: [Account]
+    var watchedRepos: [WatchedRepo]
     var seenEventIDs: Set<String>
     var lastFetchByRepo: [String: Date]
     var minimumSeverity: SecurityEventSeverity
@@ -38,11 +40,12 @@ nonisolated struct PersistedState: Codable {
 
     enum CodingKeys: String, CodingKey {
         case watchedRepos, seenEventIDs, lastFetchByRepo, minimumSeverity, hasRepoScope, sortOrder
-        case notifiedEventIDsByRepo, triage, history
+        case notifiedEventIDsByRepo, triage, history, accounts
     }
 
     init(
-        watchedRepos: [String],
+        accounts: [Account] = [],
+        watchedRepos: [WatchedRepo],
         seenEventIDs: Set<String>,
         lastFetchByRepo: [String: Date],
         minimumSeverity: SecurityEventSeverity,
@@ -52,6 +55,7 @@ nonisolated struct PersistedState: Codable {
         triage: AlertTriage = AlertTriage(),
         history: AlertHistory = AlertHistory()
     ) {
+        self.accounts = accounts
         self.watchedRepos = watchedRepos
         self.seenEventIDs = seenEventIDs
         self.lastFetchByRepo = lastFetchByRepo
@@ -67,7 +71,15 @@ nonisolated struct PersistedState: Codable {
     // and sortOrder existed still load instead of falling back to .placeholder.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        watchedRepos = try container.decode([String].self, forKey: .watchedRepos)
+        accounts = try container.decodeIfPresent([Account].self, forKey: .accounts) ?? []
+        // Before multi-account, watchedRepos was a plain [String] belonging to
+        // the one signed-in account. Decode either shape.
+        if let repos = try? container.decode([WatchedRepo].self, forKey: .watchedRepos) {
+            watchedRepos = repos
+        } else {
+            let names = try container.decode([String].self, forKey: .watchedRepos)
+            watchedRepos = names.map { WatchedRepo(fullName: $0, accountID: 0) }
+        }
         seenEventIDs = try container.decode(Set<String>.self, forKey: .seenEventIDs)
         lastFetchByRepo = try container.decode([String: Date].self, forKey: .lastFetchByRepo)
         minimumSeverity = try container.decode(SecurityEventSeverity.self, forKey: .minimumSeverity)
@@ -82,7 +94,7 @@ nonisolated struct PersistedState: Codable {
     }
 
     static let placeholder = PersistedState(
-        watchedRepos: ["ccleberg/cleberg.net"],
+        watchedRepos: [WatchedRepo(fullName: "ccleberg/cleberg.net", accountID: 0)],
         seenEventIDs: [],
         lastFetchByRepo: [:],
         minimumSeverity: .low
