@@ -87,6 +87,11 @@ nonisolated struct SecretScanningAlertDTO: Decodable {
     }
 }
 
+nonisolated struct GitHubUserDTO: Decodable {
+    let id: Int
+    let login: String
+}
+
 nonisolated struct GitHubRepoDTO: Decodable {
     let fullName: String
 

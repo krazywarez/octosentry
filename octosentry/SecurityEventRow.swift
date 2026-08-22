@@ -8,6 +8,9 @@ import SwiftUI
 
 struct SecurityEventRow: View {
     let event: SecurityEvent
+    /// Which account(s) this alert came through. Set only when the same repo
+    /// is watched under more than one identity — otherwise it's noise.
+    var attribution: String?
     var isHidden = false
     var snoozedUntil: Date?
     var onMarkSeen: () -> Void
@@ -44,6 +47,15 @@ struct SecurityEventRow: View {
                         Text(event.repoFullName)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+
+                        if let attribution {
+                            Text(attribution)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(.secondary.opacity(0.15), in: Capsule())
+                        }
 
                         Spacer()
 

@@ -26,7 +26,7 @@ final class SecurityEventStore {
     private(set) var minimumSeverity: SecurityEventSeverity = .low
     private(set) var sortOrder: AlertSortOrder = .severity
     private(set) var totalFetchedCount = 0
-    private(set) var watchedRepos: [String] = []
+    private(set) var watchedRepos: [WatchedRepo] = []
     private(set) var watchListErrorMessage: String?
 
     /// Per-session narrowing, not persisted. Setting it re-derives `events`.
@@ -46,6 +46,14 @@ final class SecurityEventStore {
     /// the watch list can contain repos that returned nothing.
     var reposInFeed: [String] {
         Set(rawEvents.map(\.repoFullName)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    /// Repo names watched under more than one account — the feed shows
+    /// attribution only for these, since it's noise everywhere else.
+    private var reposWatchedBySeveralAccounts: Set<String> = []
+
+    func showsAttribution(for repoFullName: String) -> Bool {
+        reposWatchedBySeveralAccounts.contains(repoFullName)
     }
 
     /// Alerts held back by the source/repo filter, as opposed to the
@@ -76,13 +84,12 @@ final class SecurityEventStore {
         triage = state.triage
         history = state.history
 
-        guard let token = KeychainTokenStore.load() else {
+        let accountsByID = Dictionary(uniqueKeysWithValues: state.accounts.map { ($0.id, $0) })
+        guard !accountsByID.isEmpty else {
             errorMessages = [stateLoadFailure, GitHubAPIError.missingToken.errorDescription ?? "Not signed in."]
                 .compactMap { $0 }
             return
         }
-
-        let client = GitHubSecurityAPIClient(token: token)
 
         var fetchedEvents: [SecurityEvent] = []
         var errors: [String] = [stateLoadFailure].compactMap { $0 }
@@ -92,19 +99,30 @@ final class SecurityEventStore {
         // alerts look new on the next poll.
         var fetchedEventsByRepo: [String: [SecurityEvent]] = [:]
 
-        for repoFullName in state.watchedRepos {
+        for watched in state.watchedRepos {
+            let repoFullName = watched.fullName
             let parts = repoFullName.split(separator: "/", maxSplits: 1)
             guard parts.count == 2 else { continue }
             let owner = String(parts[0])
             let repo = String(parts[1])
 
-            async let dependabot = fetchSource(label: "\(repoFullName) · Dependabot") {
+            guard let account = accountsByID[watched.accountID],
+                  let token = KeychainTokenStore.load(account: account.keychainAccount) else {
+                errors.append("\(repoFullName): no signed-in account can reach this repo.")
+                continue
+            }
+            let client = GitHubSecurityAPIClient(token: token)
+            let label = accountsByID.count > 1
+                ? "\(repoFullName) (\(account.displayName))"
+                : repoFullName
+
+            async let dependabot = fetchSource(label: "\(label) · Dependabot") {
                 try await client.fetchDependabotAlerts(owner: owner, repo: repo)
             }
-            async let codeScanning = fetchSource(label: "\(repoFullName) · Code scanning") {
+            async let codeScanning = fetchSource(label: "\(label) · Code scanning") {
                 try await client.fetchCodeScanningAlerts(owner: owner, repo: repo)
             }
-            async let secretScanning = fetchSource(label: "\(repoFullName) · Secret scanning") {
+            async let secretScanning = fetchSource(label: "\(label) · Secret scanning") {
                 try await client.fetchSecretScanningAlerts(owner: owner, repo: repo)
             }
 
@@ -114,7 +132,11 @@ final class SecurityEventStore {
             for outcome in outcomes {
                 switch outcome {
                 case .events(let sourceEvents):
-                    repoEvents += sourceEvents
+                    repoEvents += sourceEvents.map { event in
+                        var event = event
+                        event.accountLogins = [account.displayName]
+                        return event
+                    }
                     repoSucceeded = true
                 case .unavailable(let label):
                     notices.append("\(label) alerts aren't available for this repo (disabled, or token lacks that permission).")
@@ -125,9 +147,17 @@ final class SecurityEventStore {
             fetchedEvents += repoEvents
             if repoSucceeded {
                 state.lastFetchByRepo[repoFullName] = Date()
-                fetchedEventsByRepo[repoFullName] = repoEvents
+                fetchedEventsByRepo[repoFullName, default: []] += repoEvents
             }
         }
+
+        // The same alert reached through two identities is one alert; merge
+        // the attributions rather than showing it twice.
+        fetchedEvents = Self.merged(fetchedEvents)
+        for (repoFullName, events) in fetchedEventsByRepo {
+            fetchedEventsByRepo[repoFullName] = Self.merged(events)
+        }
+        reposWatchedBySeveralAccounts = Self.reposWatchedBySeveralAccounts(in: state.watchedRepos)
 
         rawEvents = fetchedEvents.map { event in
             var event = event
@@ -142,7 +172,7 @@ final class SecurityEventStore {
 
         // Only prune against a complete picture: if a repo failed this round
         // its alerts are missing, and pruning would forget they were hidden.
-        if fetchedEventsByRepo.count == state.watchedRepos.count {
+        if fetchedEventsByRepo.count == Set(state.watchedRepos.map(\.fullName)).count {
             let now = Date()
             state.triage = state.triage.pruned(
                 presentEventIDs: Set(fetchedEvents.map(\.id)),
@@ -164,7 +194,7 @@ final class SecurityEventStore {
         )
         state.notifiedEventIDsByRepo = AlertDiff.updatedBaseline(
             from: fetchedEventsByRepo,
-            watchedRepos: state.watchedRepos,
+            watchedRepos: state.watchedRepos.map(\.fullName),
             previous: state.notifiedEventIDsByRepo
         )
         await persistenceStore.save(state)
@@ -190,7 +220,7 @@ final class SecurityEventStore {
         await persistenceStore.save(state)
     }
 
-    func addRepo(_ input: String) async {
+    func addRepo(_ input: String, accountID: Int) async {
         watchListErrorMessage = nil
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         let parts = trimmed.split(separator: "/", omittingEmptySubsequences: true)
@@ -205,14 +235,15 @@ final class SecurityEventStore {
 
         var state = await persistenceStore.load()
         // GitHub owner/repo names are case-insensitive, so treat entries
-        // that differ only in case as the same watched repo.
+        // that differ only in case as the same watched repo. The same repo
+        // under a different account is a separate entry on purpose.
         guard !state.watchedRepos.contains(where: {
-            $0.caseInsensitiveCompare(repoFullName) == .orderedSame
+            $0.accountID == accountID && $0.fullName.caseInsensitiveCompare(repoFullName) == .orderedSame
         }) else {
             watchListErrorMessage = "\(repoFullName) is already watched."
             return
         }
-        state.watchedRepos.append(repoFullName)
+        state.watchedRepos.append(WatchedRepo(fullName: repoFullName, accountID: accountID))
         await persistenceStore.save(state)
         watchedRepos = state.watchedRepos
 
@@ -222,8 +253,8 @@ final class SecurityEventStore {
     /// Lists repos the current token can see, for the repo picker (#15).
     /// Requires broader repo-access scope — throws if the token only has
     /// the default security_events scope.
-    func fetchAccessibleRepos() async throws -> [String] {
-        guard let token = KeychainTokenStore.load() else {
+    func fetchAccessibleRepos(for account: Account) async throws -> [String] {
+        guard let token = KeychainTokenStore.load(account: account.keychainAccount) else {
             throw GitHubAPIError.missingToken
         }
         return try await GitHubSecurityAPIClient(token: token).fetchAccessibleRepos()
@@ -265,10 +296,12 @@ final class SecurityEventStore {
         applyFilters()
     }
 
-    func removeRepo(_ repoFullName: String) async {
+    func removeRepo(_ watched: WatchedRepo) async {
         var state = await persistenceStore.load()
-        state.watchedRepos.removeAll { $0 == repoFullName }
-        state.lastFetchByRepo.removeValue(forKey: repoFullName)
+        state.watchedRepos.removeAll { $0 == watched }
+        if !state.watchedRepos.contains(where: { $0.fullName == watched.fullName }) {
+            state.lastFetchByRepo.removeValue(forKey: watched.fullName)
+        }
         await persistenceStore.save(state)
         watchedRepos = state.watchedRepos
 
@@ -296,6 +329,35 @@ final class SecurityEventStore {
             return filter.showsHidden || !triage.isHidden(event.id, now: now)
         }
         events = sortOrder.sorted(filter.apply(to: admitted))
+    }
+
+    /// Collapses alerts that arrived through more than one account, keeping
+    /// one row and unioning the attributions. Input order is preserved.
+    nonisolated static func merged(_ events: [SecurityEvent]) -> [SecurityEvent] {
+        var order: [String] = []
+        var byID: [String: SecurityEvent] = [:]
+
+        for event in events {
+            if var existing = byID[event.id] {
+                for login in event.accountLogins where !existing.accountLogins.contains(login) {
+                    existing.accountLogins.append(login)
+                }
+                byID[event.id] = existing
+            } else {
+                order.append(event.id)
+                byID[event.id] = event
+            }
+        }
+
+        return order.compactMap { byID[$0] }
+    }
+
+    nonisolated static func reposWatchedBySeveralAccounts(in watched: [WatchedRepo]) -> Set<String> {
+        var accountsByRepo: [String: Set<Int>] = [:]
+        for repo in watched {
+            accountsByRepo[repo.fullName, default: []].insert(repo.accountID)
+        }
+        return Set(accountsByRepo.filter { $0.value.count > 1 }.keys)
     }
 
     private enum SourceOutcome {
