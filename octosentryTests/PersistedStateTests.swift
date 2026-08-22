@@ -31,7 +31,8 @@ struct PersistedStateTests {
             seenEventIDs: ["dependabot-octocat/hello-world-1", "codeScanning-octocat/spoon-knife-7"],
             lastFetchByRepo: ["octocat/hello-world": fetchedAt],
             minimumSeverity: .high,
-            hasRepoScope: true
+            hasRepoScope: true,
+            sortOrder: .repo
         )
 
         let decoded = try Self.decoder.decode(
@@ -44,6 +45,7 @@ struct PersistedStateTests {
         #expect(decoded.lastFetchByRepo == original.lastFetchByRepo)
         #expect(decoded.minimumSeverity == original.minimumSeverity)
         #expect(decoded.hasRepoScope == original.hasRepoScope)
+        #expect(decoded.sortOrder == original.sortOrder)
     }
 
     @Test func encodesTheKeysOnDiskReadersDependOn() throws {
@@ -53,12 +55,12 @@ struct PersistedStateTests {
         )
 
         #expect(Set(object.keys) == [
-            "watchedRepos", "seenEventIDs", "lastFetchByRepo", "minimumSeverity", "hasRepoScope",
+            "watchedRepos", "seenEventIDs", "lastFetchByRepo", "minimumSeverity", "hasRepoScope", "sortOrder",
         ])
     }
 
-    // A state.json written before hasRepoScope existed must still load.
-    @Test func decodesLegacyStateWithoutRepoScope() throws {
+    // A state.json written before hasRepoScope and sortOrder existed must still load.
+    @Test func decodesLegacyStateWithoutRepoScopeOrSortOrder() throws {
         let legacy = """
         {
           "watchedRepos": ["octocat/hello-world"],
@@ -74,6 +76,7 @@ struct PersistedStateTests {
         #expect(state.seenEventIDs == ["dependabot-octocat/hello-world-1"])
         #expect(state.minimumSeverity == .medium)
         #expect(state.hasRepoScope == false)
+        #expect(state.sortOrder == .severity)
     }
 
     @Test func rejectsStateMissingARequiredField() {
@@ -91,5 +94,6 @@ struct PersistedStateTests {
         #expect(PersistedState.placeholder.lastFetchByRepo.isEmpty)
         #expect(PersistedState.placeholder.minimumSeverity == .low)
         #expect(PersistedState.placeholder.hasRepoScope == false)
+        #expect(PersistedState.placeholder.sortOrder == .severity)
     }
 }
