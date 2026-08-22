@@ -277,6 +277,14 @@ struct SecurityEventListView: View {
                         tint: .secondary,
                         message: "\(store.totalFetchedCount) alert(s) are below your minimum severity filter"
                     )
+                } else if store.watchedRepos.isEmpty {
+                    // "No open alerts" would be misleading when nothing is
+                    // being watched in the first place.
+                    StatusView(
+                        systemImage: "plus.circle",
+                        tint: .secondary,
+                        message: "No repositories watched yet — add one from the gear menu"
+                    )
                 } else {
                     StatusView(systemImage: "checkmark.shield", tint: .green, message: "No open security alerts")
                 }
