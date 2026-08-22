@@ -38,6 +38,10 @@ final class SecurityEventStore {
     /// so the feed can be re-derived without touching disk.
     private(set) var triage = AlertTriage()
 
+    /// Trend data for the dedicated window (#10). Mirrored from
+    /// PersistedState so the view doesn't touch disk.
+    private(set) var history = AlertHistory()
+
     /// Repos represented in the current fetch, for the repo filter menu —
     /// the watch list can contain repos that returned nothing.
     var reposInFeed: [String] {
@@ -70,6 +74,7 @@ final class SecurityEventStore {
         sortOrder = state.sortOrder
         watchedRepos = state.watchedRepos
         triage = state.triage
+        history = state.history
 
         guard let token = KeychainTokenStore.load() else {
             errorMessages = [stateLoadFailure, GitHubAPIError.missingToken.errorDescription ?? "Not signed in."]
@@ -138,12 +143,18 @@ final class SecurityEventStore {
         // Only prune against a complete picture: if a repo failed this round
         // its alerts are missing, and pruning would forget they were hidden.
         if fetchedEventsByRepo.count == state.watchedRepos.count {
+            let now = Date()
             state.triage = state.triage.pruned(
                 presentEventIDs: Set(fetchedEvents.map(\.id)),
-                now: Date()
+                now: now
             )
             triage = state.triage
             applyFilters()
+
+            // Same completeness rule: an alert missing because its repo
+            // errored has not been resolved.
+            state.history.record(fetchedEvents, at: now)
+            history = state.history
         }
 
         let newEvents = AlertDiff.newlyAppeared(

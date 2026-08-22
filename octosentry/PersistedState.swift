@@ -32,9 +32,13 @@ nonisolated struct PersistedState: Codable {
     /// What the user has hidden locally, and until when.
     var triage: AlertTriage
 
+    /// Snapshots and per-alert lifecycles behind the trends view. Bounded by
+    /// AlertHistory's own retention rules.
+    var history: AlertHistory
+
     enum CodingKeys: String, CodingKey {
         case watchedRepos, seenEventIDs, lastFetchByRepo, minimumSeverity, hasRepoScope, sortOrder
-        case notifiedEventIDsByRepo, triage
+        case notifiedEventIDsByRepo, triage, history
     }
 
     init(
@@ -45,7 +49,8 @@ nonisolated struct PersistedState: Codable {
         hasRepoScope: Bool = false,
         sortOrder: AlertSortOrder = .severity,
         notifiedEventIDsByRepo: [String: Set<String>]? = nil,
-        triage: AlertTriage = AlertTriage()
+        triage: AlertTriage = AlertTriage(),
+        history: AlertHistory = AlertHistory()
     ) {
         self.watchedRepos = watchedRepos
         self.seenEventIDs = seenEventIDs
@@ -55,6 +60,7 @@ nonisolated struct PersistedState: Codable {
         self.sortOrder = sortOrder
         self.notifiedEventIDsByRepo = notifiedEventIDsByRepo
         self.triage = triage
+        self.history = history
     }
 
     // Custom decode so existing state.json files saved before hasRepoScope
@@ -72,6 +78,7 @@ nonisolated struct PersistedState: Codable {
             forKey: .notifiedEventIDsByRepo
         )
         triage = try container.decodeIfPresent(AlertTriage.self, forKey: .triage) ?? AlertTriage()
+        history = try container.decodeIfPresent(AlertHistory.self, forKey: .history) ?? AlertHistory()
     }
 
     static let placeholder = PersistedState(
