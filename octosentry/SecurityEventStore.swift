@@ -266,13 +266,22 @@ final class SecurityEventStore {
 
     /// Local-only triage state (spec §11) — no API write, no scope beyond
     /// read needed. Removes the event from the active stream.
-    func markSeen(_ eventID: String) async {
+    /// Acknowledges an alert without hiding it — the row stays, rendered as
+    /// seen. Dropping it from the feed only lasted until the next poll put it
+    /// back looking untouched; hiding an alert is what dismiss and snooze are
+    /// for. Toggleable, so acknowledging isn't a one-way door.
+    func setSeen(_ eventID: String, _ seen: Bool) async {
         var state = await persistenceStore.load()
-        state.seenEventIDs.insert(eventID)
+        if seen {
+            state.seenEventIDs.insert(eventID)
+        } else {
+            state.seenEventIDs.remove(eventID)
+        }
         await persistenceStore.save(state)
 
-        rawEvents.removeAll { $0.id == eventID }
-        totalFetchedCount = rawEvents.count
+        if let index = rawEvents.firstIndex(where: { $0.id == eventID }) {
+            rawEvents[index].seenLocally = seen
+        }
         applyFilters()
     }
 

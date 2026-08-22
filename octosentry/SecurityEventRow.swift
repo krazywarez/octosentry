@@ -13,7 +13,7 @@ struct SecurityEventRow: View {
     var attribution: String?
     var isHidden = false
     var snoozedUntil: Date?
-    var onMarkSeen: () -> Void
+    var onToggleSeen: () -> Void
     var onDismiss: () -> Void = {}
     var onSnooze: (SnoozeDuration) -> Void = { _ in }
     var onRestore: () -> Void = {}
@@ -80,6 +80,9 @@ struct SecurityEventRow: View {
                 }
                 .padding(10)
                 .contentShape(Rectangle())
+                // Seen alerts stay in the feed but recede, so the
+                // acknowledgement is visible rather than silently discarded.
+                .opacity(event.seenLocally ? 0.5 : 1)
             }
             .buttonStyle(.plain)
 
@@ -93,12 +96,12 @@ struct SecurityEventRow: View {
                 .padding(.top, 12)
                 .padding(.trailing, 10)
             } else {
-                Button(action: onMarkSeen) {
-                    Image(systemName: "checkmark.circle")
+                Button(action: onToggleSeen) {
+                    Image(systemName: event.seenLocally ? "checkmark.circle.fill" : "checkmark.circle")
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .help("Mark as seen")
+                .foregroundStyle(event.seenLocally ? Color.accentColor : .secondary)
+                .help(event.seenLocally ? "Mark as unseen" : "Mark as seen")
                 .padding(.top, 12)
                 .padding(.trailing, 6)
 
@@ -144,6 +147,6 @@ struct SecurityEventRow: View {
             updatedAt: .now,
             seenLocally: false
         ),
-        onMarkSeen: {}
+        onToggleSeen: {}
     )
 }
