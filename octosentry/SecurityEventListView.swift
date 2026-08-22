@@ -194,6 +194,19 @@ struct SecurityEventListView: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
 
+            Button {
+                store.filter.showsHidden.toggle()
+            } label: {
+                FilterLabel(
+                    title: "Hidden",
+                    count: 0,
+                    systemImage: store.filter.showsHidden ? "eye" : "eye.slash"
+                )
+                .foregroundStyle(store.filter.showsHidden ? Color.accentColor : .secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Show dismissed and snoozed alerts")
+
             Spacer()
 
             if store.filter.isActive {
@@ -274,9 +287,17 @@ struct SecurityEventListView: View {
                         Divider()
                     }
                     ForEach(store.events) { event in
-                        SecurityEventRow(event: event) {
-                            Task { await store.markSeen(event.id) }
-                        }
+                        SecurityEventRow(
+                            event: event,
+                            isHidden: store.triage.isHidden(event.id, now: .now),
+                            snoozedUntil: store.triage.snoozedUntil(event.id, now: .now),
+                            onMarkSeen: { Task { await store.markSeen(event.id) } },
+                            onDismiss: { Task { await store.dismiss(event.id) } },
+                            onSnooze: { duration in
+                                Task { await store.snooze(event.id, until: duration.date(from: .now)) }
+                            },
+                            onRestore: { Task { await store.restore(event.id) } }
+                        )
                         Divider()
                     }
                 }

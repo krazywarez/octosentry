@@ -4,8 +4,8 @@
 //
 //  Everything the app remembers across launches: the repo watch list,
 //  local-only seen-state per event, last-fetch timestamp per repo, the
-//  minimum severity filter, the feed sort order, the per-repo alert IDs
-//  the notifier has already accounted for, and whether the current token
+//  minimum severity filter, the feed sort order, local triage state, the
+//  per-repo alert IDs the notifier has already accounted for, and whether the current token
 //  has the broader "repo" scope needed to list repos. Flat JSON over SwiftData
 //  (see #1) — small, inspectable, and these are already plain Codable
 //  values passed across actor boundaries, not reference types tied to a
@@ -29,9 +29,12 @@ nonisolated struct PersistedState: Codable {
     /// arrive as a burst.
     var notifiedEventIDsByRepo: [String: Set<String>]?
 
+    /// What the user has hidden locally, and until when.
+    var triage: AlertTriage
+
     enum CodingKeys: String, CodingKey {
         case watchedRepos, seenEventIDs, lastFetchByRepo, minimumSeverity, hasRepoScope, sortOrder
-        case notifiedEventIDsByRepo
+        case notifiedEventIDsByRepo, triage
     }
 
     init(
@@ -41,7 +44,8 @@ nonisolated struct PersistedState: Codable {
         minimumSeverity: SecurityEventSeverity,
         hasRepoScope: Bool = false,
         sortOrder: AlertSortOrder = .severity,
-        notifiedEventIDsByRepo: [String: Set<String>]? = nil
+        notifiedEventIDsByRepo: [String: Set<String>]? = nil,
+        triage: AlertTriage = AlertTriage()
     ) {
         self.watchedRepos = watchedRepos
         self.seenEventIDs = seenEventIDs
@@ -50,6 +54,7 @@ nonisolated struct PersistedState: Codable {
         self.hasRepoScope = hasRepoScope
         self.sortOrder = sortOrder
         self.notifiedEventIDsByRepo = notifiedEventIDsByRepo
+        self.triage = triage
     }
 
     // Custom decode so existing state.json files saved before hasRepoScope
@@ -66,6 +71,7 @@ nonisolated struct PersistedState: Codable {
             [String: Set<String>].self,
             forKey: .notifiedEventIDsByRepo
         )
+        triage = try container.decodeIfPresent(AlertTriage.self, forKey: .triage) ?? AlertTriage()
     }
 
     static let placeholder = PersistedState(
