@@ -4,8 +4,8 @@
 //
 //  Everything the app remembers across launches: the repo watch list,
 //  local-only seen-state per event, last-fetch timestamp per repo, the
-//  minimum severity filter, and whether the current token has the
-//  broader "repo" scope needed to list repos. Flat JSON over SwiftData
+//  minimum severity filter, the feed sort order, and whether the current
+//  token has the broader "repo" scope needed to list repos. Flat JSON over SwiftData
 //  (see #1) — small, inspectable, and these are already plain Codable
 //  values passed across actor boundaries, not reference types tied to a
 //  persistence context.
@@ -19,9 +19,10 @@ nonisolated struct PersistedState: Codable {
     var lastFetchByRepo: [String: Date]
     var minimumSeverity: SecurityEventSeverity
     var hasRepoScope: Bool
+    var sortOrder: AlertSortOrder
 
     enum CodingKeys: String, CodingKey {
-        case watchedRepos, seenEventIDs, lastFetchByRepo, minimumSeverity, hasRepoScope
+        case watchedRepos, seenEventIDs, lastFetchByRepo, minimumSeverity, hasRepoScope, sortOrder
     }
 
     init(
@@ -29,17 +30,19 @@ nonisolated struct PersistedState: Codable {
         seenEventIDs: Set<String>,
         lastFetchByRepo: [String: Date],
         minimumSeverity: SecurityEventSeverity,
-        hasRepoScope: Bool = false
+        hasRepoScope: Bool = false,
+        sortOrder: AlertSortOrder = .severity
     ) {
         self.watchedRepos = watchedRepos
         self.seenEventIDs = seenEventIDs
         self.lastFetchByRepo = lastFetchByRepo
         self.minimumSeverity = minimumSeverity
         self.hasRepoScope = hasRepoScope
+        self.sortOrder = sortOrder
     }
 
     // Custom decode so existing state.json files saved before hasRepoScope
-    // existed still load instead of falling back to .placeholder.
+    // and sortOrder existed still load instead of falling back to .placeholder.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         watchedRepos = try container.decode([String].self, forKey: .watchedRepos)
@@ -47,6 +50,7 @@ nonisolated struct PersistedState: Codable {
         lastFetchByRepo = try container.decode([String: Date].self, forKey: .lastFetchByRepo)
         minimumSeverity = try container.decode(SecurityEventSeverity.self, forKey: .minimumSeverity)
         hasRepoScope = try container.decodeIfPresent(Bool.self, forKey: .hasRepoScope) ?? false
+        sortOrder = try container.decodeIfPresent(AlertSortOrder.self, forKey: .sortOrder) ?? .severity
     }
 
     static let placeholder = PersistedState(

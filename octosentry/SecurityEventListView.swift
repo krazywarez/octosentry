@@ -26,6 +26,8 @@ struct SecurityEventListView: View {
             } else if showingRepoManager {
                 RepoManagerView(store: store, authStore: authStore)
             } else {
+                filterBar
+                Divider()
                 content
             }
         }
@@ -101,13 +103,104 @@ struct SecurityEventListView: View {
         .padding(12)
     }
 
+    private var filterBar: some View {
+        HStack(spacing: 8) {
+            Menu {
+                ForEach(SecurityEventSource.allCases, id: \.self) { source in
+                    Toggle(source.displayName, isOn: binding(for: source))
+                }
+            } label: {
+                FilterLabel(title: "Source", count: store.filter.sources.count)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+
+            Menu {
+                if store.reposInFeed.isEmpty {
+                    Text("No repos in the current feed")
+                } else {
+                    ForEach(store.reposInFeed, id: \.self) { repo in
+                        Toggle(repo, isOn: binding(for: repo))
+                    }
+                }
+            } label: {
+                FilterLabel(title: "Repo", count: store.filter.repos.count)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .disabled(store.reposInFeed.isEmpty)
+
+            Menu {
+                Picker("Sort", selection: Binding(
+                    get: { store.sortOrder },
+                    set: { newValue in Task { await store.setSortOrder(newValue) } }
+                )) {
+                    ForEach(AlertSortOrder.allCases, id: \.self) { order in
+                        Text(order.displayName).tag(order)
+                    }
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
+            } label: {
+                FilterLabel(title: store.sortOrder.displayName, count: 0, systemImage: "arrow.up.arrow.down")
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+
+            Spacer()
+
+            if store.filter.isActive {
+                Button("Clear") {
+                    store.filter = AlertFilter()
+                }
+                .buttonStyle(.plain)
+                .font(.caption)
+                .foregroundStyle(Color.accentColor)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+    }
+
+    private func binding(for source: SecurityEventSource) -> Binding<Bool> {
+        Binding(
+            get: { store.filter.sources.contains(source) },
+            set: { isOn in
+                if isOn {
+                    store.filter.sources.insert(source)
+                } else {
+                    store.filter.sources.remove(source)
+                }
+            }
+        )
+    }
+
+    private func binding(for repo: String) -> Binding<Bool> {
+        Binding(
+            get: { store.filter.repos.contains(repo) },
+            set: { isOn in
+                if isOn {
+                    store.filter.repos.insert(repo)
+                } else {
+                    store.filter.repos.remove(repo)
+                }
+            }
+        )
+    }
+
     @ViewBuilder
     private var content: some View {
         if store.events.isEmpty && !store.errorMessages.isEmpty {
             StatusView(systemImage: "exclamationmark.triangle", tint: .orange, message: store.errorMessages.joined(separator: "\n\n"))
         } else if store.events.isEmpty && !store.isLoading {
             VStack(spacing: 8) {
-                if store.totalFetchedCount > 0 {
+                if store.filter.isActive && store.filteredOutCount > 0 {
+                    StatusView(
+                        systemImage: "line.3.horizontal.decrease.circle",
+                        tint: .secondary,
+                        message: "\(store.filteredOutCount) alert(s) hidden by the current filter"
+                    )
+                } else if store.totalFetchedCount > 0 {
                     StatusView(
                         systemImage: "line.3.horizontal.decrease.circle",
                         tint: .secondary,
@@ -295,6 +388,18 @@ private struct RepoManagerView: View {
         let text = newRepoText
         newRepoText = ""
         Task { await store.addRepo(text) }
+    }
+}
+
+private struct FilterLabel: View {
+    let title: String
+    let count: Int
+    var systemImage = "line.3.horizontal.decrease.circle"
+
+    var body: some View {
+        Label(count > 0 ? "\(title) (\(count))" : title, systemImage: systemImage)
+            .font(.caption)
+            .foregroundStyle(count > 0 ? Color.accentColor : .secondary)
     }
 }
 

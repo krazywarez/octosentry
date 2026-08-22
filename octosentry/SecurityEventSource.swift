@@ -5,7 +5,7 @@
 
 import Foundation
 
-enum SecurityEventSource: String, Codable, CaseIterable {
+nonisolated enum SecurityEventSource: String, Codable, CaseIterable {
     case dependabot
     case codeScanning
     case secretScanning
