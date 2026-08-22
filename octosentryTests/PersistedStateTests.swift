@@ -112,6 +112,11 @@ struct PersistedStateTests {
         }
     }
 
+    // A fresh install must not arrive watching somebody else's repo.
+    @Test func placeholderWatchesNothing() {
+        #expect(PersistedState.placeholder.watchedRepos.isEmpty)
+    }
+
     @Test func placeholderStartsWithNoSeenStateAndNoRepoScope() {
         #expect(PersistedState.placeholder.seenEventIDs.isEmpty)
         #expect(PersistedState.placeholder.lastFetchByRepo.isEmpty)

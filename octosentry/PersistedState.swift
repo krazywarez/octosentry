@@ -93,8 +93,11 @@ nonisolated struct PersistedState: Codable {
         history = try container.decodeIfPresent(AlertHistory.self, forKey: .history) ?? AlertHistory()
     }
 
+    /// A fresh install watches nothing until the user adds a repo. Seeding a
+    /// specific repo here meant every new install started by fetching someone
+    /// else's alerts, which it usually can't read.
     static let placeholder = PersistedState(
-        watchedRepos: [WatchedRepo(fullName: "ccleberg/cleberg.net", accountID: 0)],
+        watchedRepos: [],
         seenEventIDs: [],
         lastFetchByRepo: [:],
         minimumSeverity: .low
