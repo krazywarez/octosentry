@@ -300,6 +300,9 @@ struct SecurityEventListView: View {
                     ForEach(store.events) { event in
                         SecurityEventRow(
                             event: event,
+                            attribution: store.showsAttribution(for: event.repoFullName)
+                                ? event.accountLogins.sorted().joined(separator: ", ")
+                                : nil,
                             isHidden: store.triage.isHidden(event.id, now: .now),
                             snoozedUntil: store.triage.snoozedUntil(event.id, now: .now),
                             onMarkSeen: { Task { await store.markSeen(event.id) } },
@@ -321,28 +324,76 @@ private struct RepoManagerView: View {
     var store: SecurityEventStore
     var authStore: AuthStore
     @State private var newRepoText = ""
-    @State private var isBrowsingRepos = false
+    @State private var addingToAccountID: Int?
+    @State private var browsingAccount: Account?
     @State private var availableRepos: [String] = []
     @State private var isLoadingRepos = false
     @State private var browseErrorMessage: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Watched Repositories")
-                .font(.subheadline.weight(.semibold))
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(authStore.accounts) { account in
+                    accountSection(account)
+                    Divider()
+                }
 
-            if store.watchedRepos.isEmpty {
-                Text("No repos watched yet.")
-                    .font(.callout)
+                Button {
+                    authStore.addAccount()
+                } label: {
+                    Label("Add another account", systemImage: "person.badge.plus")
+                        .font(.caption)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.accentColor)
+
+                if let errorMessage = store.watchListErrorMessage {
+                    Text(errorMessage)
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                }
+
+                Divider()
+
+                Button("Sign Out of All Accounts") {
+                    Task { await authStore.signOutAll() }
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.red)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private func accountSection(_ account: Account) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(account.displayName)
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Button("Sign out") {
+                    Task { await authStore.signOut(account) }
+                }
+                .buttonStyle(.plain)
+                .font(.caption)
+                .foregroundStyle(.red)
+            }
+
+            let repos = store.watchedRepos.filter { $0.accountID == account.id }
+            if repos.isEmpty {
+                Text("No repos watched under this account.")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(store.watchedRepos, id: \.self) { repo in
+                ForEach(repos, id: \.self) { watched in
                     HStack {
-                        Text(repo)
+                        Text(watched.fullName)
                             .font(.callout)
                         Spacer()
                         Button {
-                            Task { await store.removeRepo(repo) }
+                            Task { await store.removeRepo(watched) }
                         } label: {
                             Image(systemName: "minus.circle.fill")
                                 .foregroundStyle(.red)
@@ -352,57 +403,41 @@ private struct RepoManagerView: View {
                 }
             }
 
-            Divider()
-
-            if isBrowsingRepos {
-                browsingContent
+            if browsingAccount == account {
+                browsingContent(account)
             } else {
                 HStack {
-                    TextField("owner/repo", text: $newRepoText)
-                        .textFieldStyle(.roundedBorder)
-                        .onSubmit(addRepo)
+                    TextField("owner/repo", text: Binding(
+                        get: { addingToAccountID == account.id ? newRepoText : "" },
+                        set: { newRepoText = $0; addingToAccountID = account.id }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { addRepo(to: account) }
 
-                    Button("Add", action: addRepo)
-                        .disabled(newRepoText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button("Add") { addRepo(to: account) }
+                        .disabled(addingToAccountID != account.id
+                            || newRepoText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
 
-                Button(action: startBrowsing) {
-                    Label("Browse your repos", systemImage: "list.bullet")
+                Button { startBrowsing(account) } label: {
+                    Label("Browse repos", systemImage: "list.bullet")
                         .font(.caption)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Color.accentColor)
             }
-
-            if let errorMessage = store.watchListErrorMessage {
-                Text(errorMessage)
-                    .font(.caption2)
-                    .foregroundStyle(.red)
-            }
-
-            Spacer()
-
-            Divider()
-
-            Button("Sign Out") {
-                authStore.signOut()
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.red)
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
-    private var browsingContent: some View {
+    private func browsingContent(_ account: Account) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("Your Repositories")
+                Text("Repositories")
                     .font(.caption.weight(.semibold))
                 Spacer()
                 Button {
-                    isBrowsingRepos = false
+                    browsingAccount = nil
                 } label: {
                     Image(systemName: "xmark.circle")
                 }
@@ -418,7 +453,10 @@ private struct RepoManagerView: View {
                     .font(.caption2)
                     .foregroundStyle(.red)
             } else {
-                let selectableRepos = availableRepos.filter { !store.watchedRepos.contains($0) }
+                let watched = Set(
+                    store.watchedRepos.filter { $0.accountID == account.id }.map(\.fullName)
+                )
+                let selectableRepos = availableRepos.filter { !watched.contains($0) }
                 if selectableRepos.isEmpty {
                     Text("All visible repos are already watched.")
                         .font(.caption2)
@@ -428,8 +466,8 @@ private struct RepoManagerView: View {
                         LazyVStack(alignment: .leading, spacing: 4) {
                             ForEach(selectableRepos, id: \.self) { repo in
                                 Button {
-                                    Task { await store.addRepo(repo) }
-                                    isBrowsingRepos = false
+                                    Task { await store.addRepo(repo, accountID: account.id) }
+                                    browsingAccount = nil
                                 } label: {
                                     Text(repo)
                                         .font(.callout)
@@ -445,17 +483,17 @@ private struct RepoManagerView: View {
         }
     }
 
-    private func startBrowsing() {
-        guard authStore.hasRepoAccess else {
+    private func startBrowsing(_ account: Account) {
+        guard account.hasRepoScope else {
             authStore.requestRepoAccess()
             return
         }
-        isBrowsingRepos = true
+        browsingAccount = account
         isLoadingRepos = true
         browseErrorMessage = nil
         Task {
             do {
-                availableRepos = try await store.fetchAccessibleRepos()
+                availableRepos = try await store.fetchAccessibleRepos(for: account)
             } catch {
                 browseErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             }
@@ -463,10 +501,11 @@ private struct RepoManagerView: View {
         }
     }
 
-    private func addRepo() {
+    private func addRepo(to account: Account) {
         let text = newRepoText
         newRepoText = ""
-        Task { await store.addRepo(text) }
+        addingToAccountID = nil
+        Task { await store.addRepo(text, accountID: account.id) }
     }
 }
 

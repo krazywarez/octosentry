@@ -14,9 +14,12 @@ import Security
 
 nonisolated enum KeychainTokenStore {
     private static let service = "net.cleberg.octosentry.github-token"
-    private static let account = "github-oauth-token"
 
-    static func save(_ token: String) throws {
+    /// The item name used before octosentry supported more than one account.
+    /// Still the name for that account's token — upgrading does not move it.
+    static let legacyAccount = "github-oauth-token"
+
+    static func save(_ token: String, account: String = legacyAccount) throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -35,7 +38,7 @@ nonisolated enum KeychainTokenStore {
         }
     }
 
-    static func load() -> String? {
+    static func load(account: String = legacyAccount) -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -50,7 +53,7 @@ nonisolated enum KeychainTokenStore {
         return String(data: data, encoding: .utf8)
     }
 
-    static func delete() {
+    static func delete(account: String = legacyAccount) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

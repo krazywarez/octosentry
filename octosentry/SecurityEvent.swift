@@ -16,4 +16,7 @@ nonisolated struct SecurityEvent: Identifiable, Codable, Sendable {
     let createdAt: Date
     let updatedAt: Date
     var seenLocally: Bool
+    /// Logins of the accounts whose token can see this alert. More than one
+    /// when the same repo is watched under several identities.
+    var accountLogins: [String] = []
 }
