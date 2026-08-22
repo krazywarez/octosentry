@@ -5,7 +5,7 @@
 
 import Foundation
 
-struct SecurityEvent: Identifiable, Codable, Sendable {
+nonisolated struct SecurityEvent: Identifiable, Codable, Sendable {
     let id: String
     let source: SecurityEventSource
     let repoFullName: String

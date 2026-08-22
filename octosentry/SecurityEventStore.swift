@@ -24,9 +24,27 @@ final class SecurityEventStore {
     private(set) var errorMessages: [String] = []
     private(set) var unavailableNotices: [String] = []
     private(set) var minimumSeverity: SecurityEventSeverity = .low
+    private(set) var sortOrder: AlertSortOrder = .severity
     private(set) var totalFetchedCount = 0
     private(set) var watchedRepos: [String] = []
     private(set) var watchListErrorMessage: String?
+
+    /// Per-session narrowing, not persisted. Setting it re-derives `events`.
+    var filter = AlertFilter() {
+        didSet { applyFilters() }
+    }
+
+    /// Repos represented in the current fetch, for the repo filter menu —
+    /// the watch list can contain repos that returned nothing.
+    var reposInFeed: [String] {
+        Set(rawEvents.map(\.repoFullName)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    /// Alerts held back by the source/repo filter, as opposed to the
+    /// severity floor, so the empty state can say which one is hiding them.
+    var filteredOutCount: Int {
+        rawEvents.filter { $0.severity >= minimumSeverity }.count - events.count
+    }
 
     var unseenCriticalCount: Int {
         rawEvents.filter { $0.severity == .critical && !$0.seenLocally }.count
@@ -45,6 +63,7 @@ final class SecurityEventStore {
         var state = await persistenceStore.load()
         let stateLoadFailure = await persistenceStore.loadFailureMessage
         minimumSeverity = state.minimumSeverity
+        sortOrder = state.sortOrder
         watchedRepos = state.watchedRepos
 
         guard let token = KeychainTokenStore.load() else {
@@ -99,7 +118,7 @@ final class SecurityEventStore {
             return event
         }
         totalFetchedCount = rawEvents.count
-        applyMinimumSeverityFilter()
+        applyFilters()
 
         errorMessages = errors
         unavailableNotices = notices
@@ -108,10 +127,19 @@ final class SecurityEventStore {
 
     func setMinimumSeverity(_ severity: SecurityEventSeverity) async {
         minimumSeverity = severity
-        applyMinimumSeverityFilter()
+        applyFilters()
 
         var state = await persistenceStore.load()
         state.minimumSeverity = severity
+        await persistenceStore.save(state)
+    }
+
+    func setSortOrder(_ order: AlertSortOrder) async {
+        sortOrder = order
+        applyFilters()
+
+        var state = await persistenceStore.load()
+        state.sortOrder = order
         await persistenceStore.save(state)
     }
 
@@ -163,7 +191,7 @@ final class SecurityEventStore {
 
         rawEvents.removeAll { $0.id == eventID }
         totalFetchedCount = rawEvents.count
-        applyMinimumSeverityFilter()
+        applyFilters()
     }
 
     func removeRepo(_ repoFullName: String) async {
@@ -190,12 +218,9 @@ final class SecurityEventStore {
         }
     }
 
-    private func applyMinimumSeverityFilter() {
-        events = rawEvents
-            .filter { $0.severity >= minimumSeverity }
-            .sorted { lhs, rhs in
-                lhs.severity != rhs.severity ? lhs.severity > rhs.severity : lhs.createdAt > rhs.createdAt
-            }
+    private func applyFilters() {
+        let admitted = rawEvents.filter { $0.severity >= minimumSeverity }
+        events = sortOrder.sorted(filter.apply(to: admitted))
     }
 
     private enum SourceOutcome {
