@@ -77,6 +77,10 @@ final class SecurityEventStore {
         var fetchedEvents: [SecurityEvent] = []
         var errors: [String] = [stateLoadFailure].compactMap { $0 }
         var notices: [String] = []
+        // Only repos that actually answered this round; a repo that errored
+        // keeps its previous baseline so a transient failure doesn't make its
+        // alerts look new on the next poll.
+        var fetchedEventsByRepo: [String: [SecurityEvent]] = [:]
 
         for repoFullName in state.watchedRepos {
             let parts = repoFullName.split(separator: "/", maxSplits: 1)
@@ -95,11 +99,12 @@ final class SecurityEventStore {
             }
 
             let outcomes = await [dependabot, codeScanning, secretScanning]
+            var repoEvents: [SecurityEvent] = []
             var repoSucceeded = false
             for outcome in outcomes {
                 switch outcome {
                 case .events(let sourceEvents):
-                    fetchedEvents += sourceEvents
+                    repoEvents += sourceEvents
                     repoSucceeded = true
                 case .unavailable(let label):
                     notices.append("\(label) alerts aren't available for this repo (disabled, or token lacks that permission).")
@@ -107,8 +112,10 @@ final class SecurityEventStore {
                     errors.append("\(label): \(message)")
                 }
             }
+            fetchedEvents += repoEvents
             if repoSucceeded {
                 state.lastFetchByRepo[repoFullName] = Date()
+                fetchedEventsByRepo[repoFullName] = repoEvents
             }
         }
 
@@ -122,7 +129,20 @@ final class SecurityEventStore {
 
         errorMessages = errors
         unavailableNotices = notices
+
+        let newEvents = AlertDiff.newlyAppeared(
+            in: fetchedEventsByRepo,
+            baseline: state.notifiedEventIDsByRepo,
+            minimumSeverity: state.minimumSeverity
+        )
+        state.notifiedEventIDsByRepo = AlertDiff.updatedBaseline(
+            from: fetchedEventsByRepo,
+            watchedRepos: state.watchedRepos,
+            previous: state.notifiedEventIDsByRepo
+        )
         await persistenceStore.save(state)
+
+        await AlertNotifier.shared.notify(about: newEvents)
     }
 
     func setMinimumSeverity(_ severity: SecurityEventSeverity) async {
