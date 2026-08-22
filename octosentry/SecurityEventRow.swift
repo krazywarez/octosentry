@@ -8,7 +8,12 @@ import SwiftUI
 
 struct SecurityEventRow: View {
     let event: SecurityEvent
+    var isHidden = false
+    var snoozedUntil: Date?
     var onMarkSeen: () -> Void
+    var onDismiss: () -> Void = {}
+    var onSnooze: (SnoozeDuration) -> Void = { _ in }
+    var onRestore: () -> Void = {}
 
     private static let relativeFormatter: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
@@ -42,6 +47,15 @@ struct SecurityEventRow: View {
 
                         Spacer()
 
+                        if let hiddenLabel {
+                            Text(hiddenLabel)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(.secondary.opacity(0.15), in: Capsule())
+                        }
+
                         Text(Self.relativeFormatter.localizedString(for: event.createdAt, relativeTo: .now))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
@@ -57,15 +71,50 @@ struct SecurityEventRow: View {
             }
             .buttonStyle(.plain)
 
-            Button(action: onMarkSeen) {
-                Image(systemName: "checkmark.circle")
+            if isHidden {
+                Button(action: onRestore) {
+                    Image(systemName: "arrow.uturn.backward.circle")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Bring back")
+                .padding(.top, 12)
+                .padding(.trailing, 10)
+            } else {
+                Button(action: onMarkSeen) {
+                    Image(systemName: "checkmark.circle")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Mark as seen")
+                .padding(.top, 12)
+                .padding(.trailing, 6)
+
+                Menu {
+                    Menu("Snooze") {
+                        ForEach(SnoozeDuration.allCases, id: \.self) { duration in
+                            Button(duration.displayName) { onSnooze(duration) }
+                        }
+                    }
+                    Button("Dismiss", action: onDismiss)
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .foregroundStyle(.secondary)
+                .help("Snooze or dismiss")
+                .padding(.top, 10)
+                .padding(.trailing, 10)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .help("Mark as seen")
-            .padding(.top, 12)
-            .padding(.trailing, 10)
         }
+    }
+
+    private var hiddenLabel: String? {
+        guard isHidden else { return nil }
+        guard let snoozedUntil else { return "Dismissed" }
+        return "Snoozed until \(snoozedUntil.formatted(date: .abbreviated, time: .shortened))"
     }
 }
 

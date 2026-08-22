@@ -58,6 +58,16 @@ struct AlertFilterTests {
         #expect(filter.apply(to: allEvents).map(\.id) == ["a"])
     }
 
+    @Test func showingHiddenCountsAsAnActiveFilter() {
+        var filter = AlertFilter()
+        #expect(filter.isActive == false)
+
+        filter.showsHidden = true
+        #expect(filter.isActive)
+        // It reveals rows rather than removing them, so nothing is filtered out.
+        #expect(filter.apply(to: allEvents).map(\.id) == ["a", "b", "c"])
+    }
+
     @Test func filterPreservesInputOrder() {
         var filter = AlertFilter()
         filter.repos = ["octocat/hello-world"]

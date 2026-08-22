@@ -15,8 +15,12 @@ nonisolated struct AlertFilter: Equatable {
     var sources: Set<SecurityEventSource> = []
     var repos: Set<String> = []
 
+    /// Reveals dismissed and snoozed alerts so they can be brought back —
+    /// without it, hiding an alert would be irreversible.
+    var showsHidden = false
+
     var isActive: Bool {
-        !sources.isEmpty || !repos.isEmpty
+        !sources.isEmpty || !repos.isEmpty || showsHidden
     }
 
     func matches(_ event: SecurityEvent) -> Bool {

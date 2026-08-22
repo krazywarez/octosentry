@@ -33,7 +33,13 @@ struct PersistedStateTests {
             minimumSeverity: .high,
             hasRepoScope: true,
             sortOrder: .repo,
-            notifiedEventIDsByRepo: ["octocat/hello-world": ["dependabot-octocat/hello-world-1"]]
+            notifiedEventIDsByRepo: ["octocat/hello-world": ["dependabot-octocat/hello-world-1"]],
+            triage: {
+                var triage = AlertTriage()
+                triage.dismiss("dependabot-octocat/hello-world-2")
+                triage.snooze("codeScanning-octocat/spoon-knife-7", until: Date(timeIntervalSince1970: 1_786_000_000))
+                return triage
+            }()
         )
 
         let decoded = try Self.decoder.decode(
@@ -48,6 +54,7 @@ struct PersistedStateTests {
         #expect(decoded.hasRepoScope == original.hasRepoScope)
         #expect(decoded.sortOrder == original.sortOrder)
         #expect(decoded.notifiedEventIDsByRepo == original.notifiedEventIDsByRepo)
+        #expect(decoded.triage == original.triage)
     }
 
     @Test func encodesTheKeysOnDiskReadersDependOn() throws {
@@ -58,6 +65,7 @@ struct PersistedStateTests {
 
         #expect(Set(object.keys) == [
             "watchedRepos", "seenEventIDs", "lastFetchByRepo", "minimumSeverity", "hasRepoScope", "sortOrder",
+            "triage",
         ])
         // notifiedEventIDsByRepo is optional and nil on the placeholder, so it
         // encodes to nothing rather than a null.
@@ -83,6 +91,7 @@ struct PersistedStateTests {
         #expect(state.hasRepoScope == false)
         #expect(state.sortOrder == .severity)
         #expect(state.notifiedEventIDsByRepo == nil)
+        #expect(state.triage == AlertTriage())
     }
 
     @Test func rejectsStateMissingARequiredField() {
