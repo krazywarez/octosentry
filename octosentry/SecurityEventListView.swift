@@ -5,6 +5,7 @@
 
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SecurityEventListView: View {
     var store: SecurityEventStore
@@ -12,6 +13,7 @@ struct SecurityEventListView: View {
     var updateStore: UpdateStore
     var isStandaloneWindow: Bool = false
     @State private var showingRepoManager = false
+    @State private var exportErrorMessage: String?
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -38,6 +40,38 @@ struct SecurityEventListView: View {
         }
         .task {
             await updateStore.checkForUpdate()
+        }
+        .alert(
+            "Export failed",
+            isPresented: Binding(
+                get: { exportErrorMessage != nil },
+                set: { if !$0 { exportErrorMessage = nil } }
+            ),
+            presenting: exportErrorMessage
+        ) { _ in
+            Button("OK", role: .cancel) { exportErrorMessage = nil }
+        } message: { message in
+            Text(message)
+        }
+    }
+
+    /// Writes exactly what the feed is showing — store.events is already
+    /// filtered and sorted.
+    private func export(_ format: AlertExportFormat) {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = AlertExport.filename(format: format)
+        panel.canCreateDirectories = true
+        panel.allowedContentTypes = [format == .csv ? .commaSeparatedText : .json]
+
+        // The app is an accessory (LSUIElement), so it has to come forward or
+        // the panel opens behind whatever is frontmost.
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            try AlertExport.data(store.events, format: format).write(to: url, options: .atomic)
+        } catch {
+            exportErrorMessage = error.localizedDescription
         }
     }
 
@@ -73,6 +107,19 @@ struct SecurityEventListView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(store.isLoading)
+
+                Menu {
+                    ForEach(AlertExportFormat.allCases, id: \.self) { format in
+                        Button("Export as \(format.displayName)…") { export(format) }
+                    }
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .disabled(store.events.isEmpty)
+                .help("Export the alerts currently shown")
             }
 
             if authStore.isSignedIn {
