@@ -43,18 +43,20 @@ final class SecurityEventStore {
         defer { isLoading = false }
 
         var state = await persistenceStore.load()
+        let stateLoadFailure = await persistenceStore.loadFailureMessage
         minimumSeverity = state.minimumSeverity
         watchedRepos = state.watchedRepos
 
         guard let token = KeychainTokenStore.load() else {
-            errorMessages = [GitHubAPIError.missingToken.errorDescription ?? "Not signed in."]
+            errorMessages = [stateLoadFailure, GitHubAPIError.missingToken.errorDescription ?? "Not signed in."]
+                .compactMap { $0 }
             return
         }
 
         let client = GitHubSecurityAPIClient(token: token)
 
         var fetchedEvents: [SecurityEvent] = []
-        var errors: [String] = []
+        var errors: [String] = [stateLoadFailure].compactMap { $0 }
         var notices: [String] = []
 
         for repoFullName in state.watchedRepos {

@@ -1,0 +1,95 @@
+//
+//  PersistedStateTests.swift
+//  octosentryTests
+//
+//  PersistedState is a file format: state.json written by one version has
+//  to load in the next. These pin the current shape.
+//
+
+import Foundation
+import Testing
+@testable import octosentry
+
+struct PersistedStateTests {
+
+    private static let encoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }()
+
+    private static let decoder: JSONDecoder = {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }()
+
+    @Test func roundTripsEveryField() throws {
+        let fetchedAt = Date(timeIntervalSince1970: 1_785_000_000)
+        let original = PersistedState(
+            watchedRepos: ["octocat/hello-world", "octocat/spoon-knife"],
+            seenEventIDs: ["dependabot-octocat/hello-world-1", "codeScanning-octocat/spoon-knife-7"],
+            lastFetchByRepo: ["octocat/hello-world": fetchedAt],
+            minimumSeverity: .high,
+            hasRepoScope: true
+        )
+
+        let decoded = try Self.decoder.decode(
+            PersistedState.self,
+            from: Self.encoder.encode(original)
+        )
+
+        #expect(decoded.watchedRepos == original.watchedRepos)
+        #expect(decoded.seenEventIDs == original.seenEventIDs)
+        #expect(decoded.lastFetchByRepo == original.lastFetchByRepo)
+        #expect(decoded.minimumSeverity == original.minimumSeverity)
+        #expect(decoded.hasRepoScope == original.hasRepoScope)
+    }
+
+    @Test func encodesTheKeysOnDiskReadersDependOn() throws {
+        let data = try Self.encoder.encode(PersistedState.placeholder)
+        let object = try #require(
+            try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+
+        #expect(Set(object.keys) == [
+            "watchedRepos", "seenEventIDs", "lastFetchByRepo", "minimumSeverity", "hasRepoScope",
+        ])
+    }
+
+    // A state.json written before hasRepoScope existed must still load.
+    @Test func decodesLegacyStateWithoutRepoScope() throws {
+        let legacy = """
+        {
+          "watchedRepos": ["octocat/hello-world"],
+          "seenEventIDs": ["dependabot-octocat/hello-world-1"],
+          "lastFetchByRepo": {"octocat/hello-world": "2026-08-01T12:00:00Z"},
+          "minimumSeverity": 1
+        }
+        """
+
+        let state = try Self.decoder.decode(PersistedState.self, from: Data(legacy.utf8))
+
+        #expect(state.watchedRepos == ["octocat/hello-world"])
+        #expect(state.seenEventIDs == ["dependabot-octocat/hello-world-1"])
+        #expect(state.minimumSeverity == .medium)
+        #expect(state.hasRepoScope == false)
+    }
+
+    @Test func rejectsStateMissingARequiredField() {
+        let missingWatchList = """
+        {"seenEventIDs": [], "lastFetchByRepo": {}, "minimumSeverity": 0}
+        """
+
+        #expect(throws: (any Error).self) {
+            try Self.decoder.decode(PersistedState.self, from: Data(missingWatchList.utf8))
+        }
+    }
+
+    @Test func placeholderStartsWithNoSeenStateAndNoRepoScope() {
+        #expect(PersistedState.placeholder.seenEventIDs.isEmpty)
+        #expect(PersistedState.placeholder.lastFetchByRepo.isEmpty)
+        #expect(PersistedState.placeholder.minimumSeverity == .low)
+        #expect(PersistedState.placeholder.hasRepoScope == false)
+    }
+}
