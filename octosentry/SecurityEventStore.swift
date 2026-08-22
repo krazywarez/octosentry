@@ -34,6 +34,10 @@ final class SecurityEventStore {
         didSet { applyFilters() }
     }
 
+    /// Local triage state (dismissed / snoozed), mirrored from PersistedState
+    /// so the feed can be re-derived without touching disk.
+    private(set) var triage = AlertTriage()
+
     /// Repos represented in the current fetch, for the repo filter menu —
     /// the watch list can contain repos that returned nothing.
     var reposInFeed: [String] {
@@ -65,6 +69,7 @@ final class SecurityEventStore {
         minimumSeverity = state.minimumSeverity
         sortOrder = state.sortOrder
         watchedRepos = state.watchedRepos
+        triage = state.triage
 
         guard let token = KeychainTokenStore.load() else {
             errorMessages = [stateLoadFailure, GitHubAPIError.missingToken.errorDescription ?? "Not signed in."]
@@ -129,6 +134,17 @@ final class SecurityEventStore {
 
         errorMessages = errors
         unavailableNotices = notices
+
+        // Only prune against a complete picture: if a repo failed this round
+        // its alerts are missing, and pruning would forget they were hidden.
+        if fetchedEventsByRepo.count == state.watchedRepos.count {
+            state.triage = state.triage.pruned(
+                presentEventIDs: Set(fetchedEvents.map(\.id)),
+                now: Date()
+            )
+            triage = state.triage
+            applyFilters()
+        }
 
         let newEvents = AlertDiff.newlyAppeared(
             in: fetchedEventsByRepo,
@@ -214,6 +230,30 @@ final class SecurityEventStore {
         applyFilters()
     }
 
+    /// Hides an alert until the user brings it back. Local only — the alert
+    /// is still open on GitHub.
+    func dismiss(_ eventID: String) async {
+        await updateTriage { $0.dismiss(eventID) }
+    }
+
+    /// Hides an alert until `date`; a later poll brings it back.
+    func snooze(_ eventID: String, until date: Date) async {
+        await updateTriage { $0.snooze(eventID, until: date) }
+    }
+
+    func restore(_ eventID: String) async {
+        await updateTriage { $0.restore(eventID) }
+    }
+
+    private func updateTriage(_ change: (inout AlertTriage) -> Void) async {
+        var state = await persistenceStore.load()
+        change(&state.triage)
+        await persistenceStore.save(state)
+
+        triage = state.triage
+        applyFilters()
+    }
+
     func removeRepo(_ repoFullName: String) async {
         var state = await persistenceStore.load()
         state.watchedRepos.removeAll { $0 == repoFullName }
@@ -239,7 +279,11 @@ final class SecurityEventStore {
     }
 
     private func applyFilters() {
-        let admitted = rawEvents.filter { $0.severity >= minimumSeverity }
+        let now = Date()
+        let admitted = rawEvents.filter { event in
+            guard event.severity >= minimumSeverity else { return false }
+            return filter.showsHidden || !triage.isHidden(event.id, now: now)
+        }
         events = sortOrder.sorted(filter.apply(to: admitted))
     }
 
