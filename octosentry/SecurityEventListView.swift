@@ -259,35 +259,42 @@ struct SecurityEventListView: View {
         )
     }
 
+    /// Why the list is empty: filtered out, below the severity floor, nothing
+    /// watched, or genuinely no alerts.
+    @ViewBuilder
+    private var emptyStatus: some View {
+        if store.filter.isActive && store.filteredOutCount > 0 {
+            StatusView(
+                systemImage: "line.3.horizontal.decrease.circle",
+                tint: .secondary,
+                message: "\(store.filteredOutCount) alert(s) hidden by the current filter"
+            )
+        } else if store.totalFetchedCount > 0 {
+            StatusView(
+                systemImage: "line.3.horizontal.decrease.circle",
+                tint: .secondary,
+                message: "\(store.totalFetchedCount) alert(s) are below your minimum severity filter"
+            )
+        } else if store.watchedRepos.isEmpty {
+            // "No open alerts" would be misleading when nothing is
+            // being watched in the first place.
+            StatusView(
+                systemImage: "plus.circle",
+                tint: .secondary,
+                message: "No repositories watched yet — add one from the gear menu"
+            )
+        } else {
+            StatusView(systemImage: "checkmark.shield", tint: .green, message: "No open security alerts")
+        }
+    }
+
     @ViewBuilder
     private var content: some View {
         if store.events.isEmpty && !store.errorMessages.isEmpty {
             StatusView(systemImage: "exclamationmark.triangle", tint: .orange, message: store.errorMessages.joined(separator: "\n\n"))
         } else if store.events.isEmpty && !store.isLoading {
             VStack(spacing: 8) {
-                if store.filter.isActive && store.filteredOutCount > 0 {
-                    StatusView(
-                        systemImage: "line.3.horizontal.decrease.circle",
-                        tint: .secondary,
-                        message: "\(store.filteredOutCount) alert(s) hidden by the current filter"
-                    )
-                } else if store.totalFetchedCount > 0 {
-                    StatusView(
-                        systemImage: "line.3.horizontal.decrease.circle",
-                        tint: .secondary,
-                        message: "\(store.totalFetchedCount) alert(s) are below your minimum severity filter"
-                    )
-                } else if store.watchedRepos.isEmpty {
-                    // "No open alerts" would be misleading when nothing is
-                    // being watched in the first place.
-                    StatusView(
-                        systemImage: "plus.circle",
-                        tint: .secondary,
-                        message: "No repositories watched yet — add one from the gear menu"
-                    )
-                } else {
-                    StatusView(systemImage: "checkmark.shield", tint: .green, message: "No open security alerts")
-                }
+                emptyStatus
                 if !store.unavailableNotices.isEmpty {
                     NoticeBanner(messages: store.unavailableNotices)
                         .padding(.horizontal)
@@ -599,16 +606,8 @@ private struct ErrorBanner: View {
     let messages: [String]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ForEach(messages, id: \.self) { message in
-                Label(message, systemImage: "exclamationmark.triangle")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(.orange.opacity(0.1))
+        MessageBanner(messages: messages, systemImage: "exclamationmark.triangle", font: .caption,
+                      foreground: AnyShapeStyle(.orange), background: AnyShapeStyle(.orange.opacity(0.1)))
     }
 }
 
@@ -616,16 +615,29 @@ private struct NoticeBanner: View {
     let messages: [String]
 
     var body: some View {
+        MessageBanner(messages: messages, systemImage: "info.circle", font: .caption2,
+                      foreground: AnyShapeStyle(.secondary), background: AnyShapeStyle(.secondary.opacity(0.08)))
+    }
+}
+
+private struct MessageBanner: View {
+    let messages: [String]
+    let systemImage: String
+    let font: Font
+    let foreground: AnyShapeStyle
+    let background: AnyShapeStyle
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(messages, id: \.self) { message in
-                Label(message, systemImage: "info.circle")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                Label(message, systemImage: systemImage)
+                    .font(font)
+                    .foregroundStyle(foreground)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
-        .background(.secondary.opacity(0.08))
+        .background(background)
     }
 }
 
