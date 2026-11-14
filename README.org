@@ -1,5 +1,7 @@
 #+title: octosentry
 
+support this project through [[https://github.com/sponsors/ccleberg][github sponsors]].
+
 * what
 macos menu bar app. aggregates github security alerts (dependabot,
 code scanning, secret scanning) across your repos into one
